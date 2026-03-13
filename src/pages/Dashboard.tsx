@@ -1,0 +1,204 @@
+// ──────────────────────────────────────────────
+// 📁 파일명: Dashboard.tsx
+// 📌 위치: src/pages/Dashboard.tsx
+//
+// 🎯 이 파일의 역할:
+//   - ERP 앱을 켰을 때 가장 먼저 보이는 대시보드 화면이에요
+//   - 실제 DB 데이터를 불러와서 요약 정보를 보여줘요
+//   - 이번 달 매출/매입, 진행중 주문, 재고부족 품목을 카드로 표시해요
+//   - 최근 주문 5건을 테이블로 보여줘요
+//
+// 🔗 연결된 파일들:
+//   - db.ts: loadOrders, loadInventory
+// ──────────────────────────────────────────────
+
+import React, { useState, useEffect } from 'react';
+import { loadOrders, loadInventory, Order, InventoryItem } from '../db';
+
+// ──────────────────────────────────────────────
+// 주문 상태 색상 (Orders.tsx 와 동일하게 맞춰요)
+// ──────────────────────────────────────────────
+const STATUS_COLORS: Record<string, string> = {
+  '견적':    'bg-gray-100 text-gray-600',
+  '계약':    'bg-blue-100 text-blue-700',
+  '출고준비': 'bg-yellow-100 text-yellow-700',
+  '출고완료': 'bg-orange-100 text-orange-700',
+  '정산완료': 'bg-green-100 text-green-700',
+};
+
+export default function Dashboard() {
+
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+
+  // ── 앱 시작 시 데이터 불러오기 ──
+  useEffect(() => {
+    const load = async () => {
+      const [o, i] = await Promise.all([loadOrders(), loadInventory()]);
+      setOrders(o);
+      setInventory(i);
+    };
+    load();
+  }, []);
+
+  // ── 이번 달 기준 날짜 ──
+  const thisMonth = new Date().toISOString().slice(0, 7); // "2026-03"
+
+  // ── 이번 달 매출 합계 ──
+  // 주문 유형이 '매출'이고 이번 달 주문인 것의 총액 합계
+  const monthlySales = orders
+    .filter(o => o.type === '매출' && o.orderDate.startsWith(thisMonth))
+    .reduce((sum, o) => sum + o.total, 0);
+
+  // ── 이번 달 매입 합계 ──
+  const monthlyPurchase = orders
+    .filter(o => o.type === '매입' && o.orderDate.startsWith(thisMonth))
+    .reduce((sum, o) => sum + o.total, 0);
+
+  // ── 진행 중 주문 수 ──
+  // 정산완료가 아닌 주문 수
+  const activeOrders = orders
+    .filter(o => o.status !== '정산완료').length;
+
+  // ── 재고 부족 품목 수 ──
+  const lowStockCount = inventory
+    .filter(i => i.minStock > 0 && i.current <= i.minStock).length;
+
+  // ── 최근 주문 5건 ──
+  const recentOrders = [...orders]
+    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
+    .slice(0, 5);
+
+  // ── 요약 카드 데이터 ──
+  const SUMMARY_CARDS = [
+    {
+      title: '이번 달 매출',
+      value: `₩${monthlySales.toLocaleString()}`,
+      icon: '📈',
+      color: 'bg-blue-500',
+      desc: '매출 주문 합계',
+    },
+    {
+      title: '이번 달 매입',
+      value: `₩${monthlyPurchase.toLocaleString()}`,
+      icon: '📉',
+      color: 'bg-green-500',
+      desc: '매입 주문 합계',
+    },
+    {
+      title: '진행 중 주문',
+      value: `${activeOrders}건`,
+      icon: '📋',
+      color: 'bg-orange-500',
+      desc: '정산완료 제외',
+    },
+    {
+      title: '재고 부족 품목',
+      value: `${lowStockCount}개`,
+      icon: '⚠️',
+      color: 'bg-red-500',
+      desc: '최소재고 이하 품목',
+    },
+  ];
+
+  return (
+    <div>
+      {/* ── 페이지 제목 ── */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-800">📊 대시보드</h2>
+        <p className="text-gray-500 mt-1">
+          {new Date().toLocaleDateString('ko-KR', {
+            year: 'numeric', month: 'long',
+            day: 'numeric', weekday: 'long',
+          })}
+        </p>
+      </div>
+
+      {/* ── 요약 카드 4개 ── */}
+      <div className="grid grid-cols-4 gap-6 mb-8">
+        {SUMMARY_CARDS.map((card, index) => (
+          <div key={index}
+               className="bg-white rounded-xl shadow-sm border border-gray-200
+                          overflow-hidden">
+            <div className={`${card.color} h-2`} />
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">{card.icon}</span>
+                <span className="text-sm font-medium text-gray-600">
+                  {card.title}
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-gray-800 mb-1">
+                {card.value}
+              </div>
+              <div className="text-xs text-gray-400">{card.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 최근 주문 현황 ── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">
+          📋 최근 주문 현황
+        </h3>
+
+        {recentOrders.length === 0 ? (
+          <div className="text-center text-gray-400 py-12">
+            <div className="text-4xl mb-3">📭</div>
+            <p className="text-sm">아직 주문 데이터가 없어요</p>
+            <p className="text-xs mt-1">주문을 등록하면 여기에 표시돼요</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['주문번호', '거래처', '품목', '총액', '주문일', '유형', '상태'].map(h => (
+                  <th key={h}
+                      className="px-4 py-3 text-left text-xs font-semibold
+                                 text-gray-600 uppercase tracking-wider">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {recentOrders.map(order => (
+                <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                    {order.orderNo}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-800">
+                    {order.partner}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{order.item}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">
+                    ₩{order.total.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {order.orderDate}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium
+                      ${order.type === '매입'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                      }`}>
+                      {order.type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium
+                      ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {order.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}

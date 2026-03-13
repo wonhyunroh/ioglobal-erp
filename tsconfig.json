@@ -1,0 +1,60 @@
+{
+  "compilerOptions": {
+    // 컴파일된 JS 버전 설정
+    // ES6 = 최신 문법 사용 가능 (화살표 함수, const 등)
+    "target": "ES6",
+
+    // .js 파일도 TypeScript 프로젝트에서 사용 가능하게 해줘요
+    "allowJs": true,
+
+    // ──────────────────────────────────────────────
+    // JSX 설정 (가장 중요!)
+    // "react" → <App /> 같은 JSX 문법을 사용할 수 있게 해줘요
+    //           없으면 "Cannot use JSX" 오류가 발생해요
+    // ──────────────────────────────────────────────
+    "jsx": "react",
+
+    // 모듈 시스템 설정
+    // commonjs = Node.js 표준 모듈 방식 (require/module.exports)
+    "module": "commonjs",
+
+    // 라이브러리 타입 검사 생략 (빌드 속도 향상)
+    "skipLibCheck": true,
+
+    // import/export 방식 호환성 설정
+    // true = import React from 'react' 방식 사용 가능
+    "esModuleInterop": true,
+
+    // 타입 명시 강제 여부
+    // true = 타입을 꼭 써야 함 (엄격 모드)
+    "noImplicitAny": true,
+
+    // 소스맵 생성 여부
+    // true = 디버깅할 때 원본 파일 위치를 보여줘요
+    "sourceMap": true,
+
+    // 경로 기준점 설정
+    // "." = 프로젝트 루트 폴더가 기준이에요
+    "baseUrl": ".",
+
+    // 컴파일된 파일 출력 폴더
+    "outDir": "dist",
+
+    // 모듈 경로 찾는 방식
+    // "node" = node_modules 폴더에서 모듈을 찾아요
+    "moduleResolution": "node",
+
+    // .json 파일을 import 할 수 있게 해줘요
+    "resolveJsonModule": true,
+
+    // 경로 별칭 설정
+    // "*" = 모든 경로를 node_modules 에서 찾아요
+    "paths": {
+      "*": ["node_modules/*"]
+    }
+  },
+
+  // TypeScript가 컴파일할 파일 범위
+  // src 폴더 안의 모든 파일을 포함해요
+  "include": ["src/**/*"]
+}

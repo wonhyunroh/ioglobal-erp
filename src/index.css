@@ -1,0 +1,22 @@
+/* ──────────────────────────────────────────────
+   src/index.css - 전역 스타일 파일
+  
+   이 파일의 역할:
+     - Tailwind CSS의 기본 스타일을 불러와요
+     - 앱 전체에 적용되는 스타일이에요
+  
+   @tailwind 지시어 설명:
+     - base       → 브라우저마다 다른 기본 스타일을 초기화해요
+                    (h1 크기, margin 등을 통일시켜요)
+     - components → Tailwind 컴포넌트 클래스를 불러와요
+     - utilities  → 우리가 실제로 쓸 유틸리티 클래스를 불러와요
+                    예: bg-blue-500, text-xl, p-4, flex 등
+  
+   쉽게 말하면:
+     - 이 세 줄이 있어야 Tailwind 클래스들이 작동해요
+     - 마치 Tailwind를 "전원 켜기" 하는 코드예요
+── ──────────────────────────────────────────── */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
