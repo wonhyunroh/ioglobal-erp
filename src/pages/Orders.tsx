@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, loadOrders, saveOrders, generateId } from '../db';
+import { exportOrders, exportDailyShipments } from '../excel';
 
 const ORDER_STATUSES = ['견적', '계약', '출고준비', '출고완료', '정산완료'];
 
@@ -132,11 +133,42 @@ export default function Orders() {
           <h2 className="text-2xl font-bold text-gray-800">📋 주문 관리</h2>
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
-        <button onClick={handleAdd}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg
-                     hover:bg-blue-700 transition-colors font-medium text-sm">
-          + 주문 추가
-        </button>
+                {/* ── 버튼 그룹 ── */}
+        <div className="flex gap-2">
+
+          {/* 일출고 저장 버튼
+              오늘 날짜 기준으로 출고완료 상태인 주문만 엑셀로 저장해요
+              납기일(dueDate)이 오늘인 주문 중 출고완료인 것만 포함돼요 */}
+          <button
+            onClick={() =>
+              exportDailyShipments(
+                orders,
+                new Date().toISOString().split('T')[0] // 오늘 날짜 (예: 2026-03-12)
+              )
+            }
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-orange-600 transition-colors font-medium text-sm">
+            📥 일출고 저장
+          </button>
+
+          {/* 전체 주문 목록 엑셀 저장 버튼
+              현재 필터와 상관없이 전체 주문을 저장해요 */}
+          <button
+            onClick={() => exportOrders(orders)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-green-700 transition-colors font-medium text-sm">
+            📥 엑셀 저장
+          </button>
+
+          {/* 주문 추가 버튼 */}
+          <button
+            onClick={handleAdd}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-blue-700 transition-colors font-medium text-sm">
+            + 주문 추가
+          </button>
+
+        </div>
       </div>
 
       {/* ── 필터 영역 ── */}

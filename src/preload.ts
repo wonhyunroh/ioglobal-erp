@@ -17,6 +17,10 @@
 //   - 새 기능 추가 시 index.ts의 ipcMain.handle과 짝을 맞춰야 해요
 //   - contextBridge.exposeInMainWorld의 첫 번째 인자('electronAPI')는
 //     React에서 window.electronAPI 로 접근하는 이름이에요
+//
+// 📦 현재 제공하는 기능:
+//   - storeGet/storeSet/storeDelete: 데이터 저장/불러오기/삭제
+//   - saveFile: 파일 저장 다이얼로그 (엑셀 저장 시 사용)
 // ──────────────────────────────────────────────
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -28,6 +32,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 //   const value = await window.electronAPI.storeGet('키이름');
 //   await window.electronAPI.storeSet('키이름', 값);
 //   await window.electronAPI.storeDelete('키이름');
+//   await window.electronAPI.saveFile('파일명.xlsx', buffer);
 // ──────────────────────────────────────────────
 contextBridge.exposeInMainWorld('electronAPI', {
 
@@ -47,5 +52,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // key: 삭제할 키 이름
   storeDelete: (key: string) =>
     ipcRenderer.invoke('store-delete', key),
+
+  // ── 파일 저장 다이얼로그 ──
+  // 엑셀 저장 시 "다른 이름으로 저장" 창을 띄워요
+  // 사용자가 원하는 위치에 직접 저장할 수 있어요
+  //
+  // filename: 기본 파일명 (예: 거래처목록_20260312.xlsx)
+  // buffer: 저장할 파일 데이터 (바이트 배열)
+  // 반환값: { success: true, filePath } 또는 { success: false }
+  saveFile: (filename: string, buffer: number[]) =>
+    ipcRenderer.invoke('save-file', filename, buffer),
 
 });

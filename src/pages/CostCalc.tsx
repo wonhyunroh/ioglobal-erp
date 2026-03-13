@@ -25,7 +25,12 @@
 //   - 이율/요율은 RATES 상수에서 관리해요
 // ──────────────────────────────────────────────
 
+// ── React 기본 훅 불러오기 ──
 import React, { useState, useEffect } from 'react';
+
+// ── 엑셀 내보내기 함수 불러오기 ──
+// exportCostCalc: 수입원가 계산 결과를 엑셀로 저장
+import { exportCostCalc } from '../excel';
 
 // ──────────────────────────────────────────────
 // 기준 이율/요율 상수
@@ -299,13 +304,57 @@ export default function CostCalc() {
             입력값을 변경하면 모든 항목이 자동으로 계산돼요
           </p>
         </div>
-        <button
-          onClick={handleReset}
-          className="px-4 py-2 text-sm font-medium text-gray-600
-                     border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          🔄 초기화
-        </button>
+        {/* ── 버튼 그룹 ── */}
+        <div className="flex gap-2">
+
+          {/* 엑셀 저장 버튼
+              현재 입력값과 계산 결과를 엑셀 파일로 저장해요
+              고정비용 항목도 함께 포함돼요 */}
+          <button
+            onClick={() => exportCostCalc({
+              blAmount: core.blQuantity,
+              importPrice: core.importPrice,
+              exchangeRate: core.exchangeRate,
+              containers: core.containers,
+              customsRate: core.tariffRate,
+              freight: core.transportFee,
+              salesQty: core.saleQuantity,
+              margin: core.margin,
+              goodsCost: result.goodsPrice,
+              loadingPrice: result.pricePerKgLoad,
+              arrivalPrice: result.pricePerKgDelivery,
+              supplyPrice: result.supplyPrice,
+              fixedFees: {
+                '전신료': fixed.telegraphFee,
+                'AMEND 수수료': fixed.amendFee,
+                'LG 발급비': fixed.lgFee,
+                '작업이적비': fixed.relocateFee,
+                '식검이적비': fixed.foodInspectRelocate,
+                '식검수수료': fixed.foodInspectFee,
+                '검정료': fixed.certFee,
+                'D/O FEE': fixed.doFee,
+                'WHARFAGE': fixed.wharfage,
+                'C/C': fixed.cc,
+                'T.H.C': fixed.thc,
+                '수입신고비': fixed.customsDeclare,
+                '분석검정비': fixed.analysisInspect,
+              },
+            })}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-green-700 transition-colors font-medium text-sm">
+            📥 엑셀 저장
+          </button>
+
+          {/* 초기화 버튼
+              핵심 입력값만 초기화해요 (고정비용은 유지) */}
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-sm font-medium text-gray-600
+                       border border-gray-300 rounded-lg hover:bg-gray-50">
+            🔄 초기화
+          </button>
+
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6">

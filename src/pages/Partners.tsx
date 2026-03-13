@@ -26,6 +26,7 @@ import {
   savePartners,
   generateId,
 } from '../db';
+import { exportPartners } from '../excel';
 
 // ──────────────────────────────────────────────
 // 테이블 헤더 목록
@@ -138,14 +139,24 @@ export default function Partners() {
             총 {partners.length}개의 거래처
           </p>
         </div>
-        <button
-          onClick={handleAdd}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg
-                     hover:bg-blue-700 transition-colors font-medium text-sm"
-        >
-          + 거래처 추가
-        </button>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={() => exportPartners(partners)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-green-700 transition-colors font-medium text-sm"
+          >
+            📥 엑셀 저장
+          </button>
+          <button
+            onClick={handleAdd}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-blue-700 transition-colors font-medium text-sm"
+          >
+            + 거래처 추가
+          </button>
       </div>
+     </div> 
 
       {/* ── 거래처 목록 테이블 ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

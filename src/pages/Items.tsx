@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Item, loadItems, saveItems, generateId } from '../db';
+import { exportItems } from '../excel';
 
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
@@ -100,13 +101,21 @@ export default function Items() {
           <h2 className="text-2xl font-bold text-gray-800">🌽 품목 관리</h2>
           <p className="text-gray-500 text-sm mt-1">총 {items.length}개의 품목</p>
         </div>
-        <button onClick={handleAdd}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg
-                     hover:bg-blue-700 transition-colors font-medium text-sm">
-          + 품목 추가
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => exportItems(items)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-green-700 transition-colors font-medium text-sm">
+            📥 엑셀 저장
+          </button>
+          <button onClick={handleAdd}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-blue-700 transition-colors font-medium text-sm">
+            + 품목 추가
+          </button>
+        </div>
       </div>
 
+      
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">

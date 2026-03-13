@@ -12,8 +12,21 @@
 //   - db.ts: loadInventory, saveInventory, generateId
 // ──────────────────────────────────────────────
 
+// ── React 기본 훅 불러오기 ──
+// useState: 화면 상태를 기억하는 기능 (재고 목록, 모달 열림/닫힘 등)
+// useEffect: 앱 시작 시 저장된 데이터를 불러오는 기능
 import React, { useState, useEffect } from 'react';
+
+// ── DB 함수 및 타입 불러오기 ──
+// InventoryItem: 재고 항목 타입
+// loadInventory: electron-store에서 재고 목록 불러오기
+// saveInventory: electron-store에 재고 목록 저장하기
+// generateId: 새 항목 추가 시 고유 ID 생성
 import { InventoryItem, loadInventory, saveInventory, generateId } from '../db';
+
+// ── 엑셀 내보내기 함수 불러오기 ──
+// exportInventory: 전체 재고 목록을 엑셀로 저장
+import { exportInventory } from '../excel';
 
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
@@ -172,11 +185,28 @@ export default function Inventory() {
             )}
           </p>
         </div>
-        <button onClick={handleAdd}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg
-                     hover:bg-blue-700 transition-colors font-medium text-sm">
-          + 품목 추가
-        </button>
+                {/* ── 버튼 그룹 ── */}
+        <div className="flex gap-2">
+
+          {/* 재고 목록 엑셀 저장 버튼
+              현재 재고 전체 목록을 엑셀 파일로 저장해요
+              재고 부족 품목은 상태 컬럼에 '부족'으로 표시돼요 */}
+          <button
+            onClick={() => exportInventory(inventory)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-green-700 transition-colors font-medium text-sm">
+            📥 엑셀 저장
+          </button>
+
+          {/* 재고 항목 추가 버튼 */}
+          <button
+            onClick={handleAdd}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-blue-700 transition-colors font-medium text-sm">
+            + 품목 추가
+          </button>
+
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
