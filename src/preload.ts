@@ -20,7 +20,8 @@
 //
 // 📦 현재 제공하는 기능:
 //   - storeGet/storeSet/storeDelete: 데이터 저장/불러오기/삭제
-//   - saveFile: 파일 저장 다이얼로그 (엑셀 저장 시 사용)
+//   - saveFile: 파일 저장 다이얼로그 (엑셀/백업 저장 시 사용)
+//   - openFile: 파일 열기 다이얼로그 (백업 복원 시 사용)
 // ──────────────────────────────────────────────
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -33,6 +34,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 //   await window.electronAPI.storeSet('키이름', 값);
 //   await window.electronAPI.storeDelete('키이름');
 //   await window.electronAPI.saveFile('파일명.xlsx', buffer);
+//   await window.electronAPI.openFile();
 // ──────────────────────────────────────────────
 contextBridge.exposeInMainWorld('electronAPI', {
 
@@ -54,13 +56,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('store-delete', key),
 
   // ── 파일 저장 다이얼로그 ──
-  // 엑셀 저장 시 "다른 이름으로 저장" 창을 띄워요
-  // 사용자가 원하는 위치에 직접 저장할 수 있어요
-  //
+  // 엑셀/백업 저장 시 "다른 이름으로 저장" 창을 띄워요
   // filename: 기본 파일명 (예: 거래처목록_20260312.xlsx)
   // buffer: 저장할 파일 데이터 (바이트 배열)
   // 반환값: { success: true, filePath } 또는 { success: false }
   saveFile: (filename: string, buffer: number[]) =>
     ipcRenderer.invoke('save-file', filename, buffer),
+
+  // ── 파일 열기 다이얼로그 ──
+  // 백업 복원 시 JSON 파일을 불러올 때 사용해요
+  // 반환값: { success: true, data: '파일내용' } 또는 { success: false }
+  openFile: () =>
+    ipcRenderer.invoke('open-file'),
 
 });

@@ -12,8 +12,8 @@
 //   - electron: 데스크톱 앱 프레임워크
 //   - electron-store: 로컬 데이터 저장소
 //     (앱 껐다 켜도 데이터가 유지돼요)
-//   - fs: 파일 시스템 (엑셀 저장 시 사용)
-//   - dialog: 파일 저장 다이얼로그
+//   - fs: 파일 시스템 (엑셀/백업 파일 저장 시 사용)
+//   - dialog: 파일 저장/열기 다이얼로그
 //
 // 🔗 통신 구조:
 //   React(렌더러) ←→ preload.ts ←→ index.ts(메인)
@@ -28,7 +28,8 @@
 //   store-get    → 저장된 데이터 불러오기
 //   store-set    → 데이터 저장하기
 //   store-delete → 데이터 삭제하기
-//   save-file    → 파일 저장 다이얼로그 (엑셀 저장 시 사용)
+//   save-file    → 파일 저장 다이얼로그 (엑셀/백업 저장 시 사용)
+//   open-file    → 파일 열기 다이얼로그 (백업 복원 시 사용)
 // ──────────────────────────────────────────────
 
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
@@ -116,11 +117,11 @@ ipcMain.handle('store-delete', (_event, key: string) => {
 // ──────────────────────────────────────────────
 // 파일 저장 다이얼로그 IPC 채널
 //
-// 엑셀 저장 시 "다른 이름으로 저장" 창을 띄워요
+// 엑셀/백업 저장 시 "다른 이름으로 저장" 창을 띄워요
 // 사용자가 원하는 위치에 파일을 저장할 수 있어요
 //
 // 동작 순서:
-//   1. 렌더러(excel.ts)에서 파일 저장 요청
+//   1. 렌더러(excel.ts / Backup.tsx)에서 파일 저장 요청
 //   2. 메인 프로세스에서 저장 다이얼로그 띄우기
 //   3. 사용자가 위치/파일명 선택
 //   4. 선택한 경로에 파일 저장
@@ -131,8 +132,10 @@ ipcMain.handle('save-file', async (_event, filename: string, buffer: number[]) =
   const { filePath, canceled } = await dialog.showSaveDialog({
     defaultPath: filename,
     filters: [
-      // xlsx 파일만 선택 가능하게 필터링
-      { name: 'Excel 파일', extensions: ['xlsx'] }
+      // 파일 확장자에 따라 필터 자동 적용
+      // xlsx → Excel 파일, json → JSON 파일
+      { name: 'Excel 파일', extensions: ['xlsx'] },
+      { name: 'JSON 백업 파일', extensions: ['json'] },
     ],
   });
 
@@ -146,6 +149,40 @@ ipcMain.handle('save-file', async (_event, filename: string, buffer: number[]) =
     return { success: true, filePath };
   } catch (err) {
     console.error('파일 저장 실패:', err);
+    return { success: false, error: String(err) };
+  }
+});
+
+// ──────────────────────────────────────────────
+// 파일 열기 다이얼로그 IPC 채널
+//
+// 복원 시 백업 JSON 파일을 불러올 때 사용해요
+//
+// 동작 순서:
+//   1. 렌더러(Backup.tsx)에서 파일 열기 요청
+//   2. 메인 프로세스에서 열기 다이얼로그 띄우기
+//   3. 사용자가 JSON 파일 선택
+//   4. 파일 내용을 문자열로 읽어서 반환
+// ──────────────────────────────────────────────
+ipcMain.handle('open-file', async () => {
+  // 파일 열기 다이얼로그 띄우기
+  const { filePaths, canceled } = await dialog.showOpenDialog({
+    // JSON 파일만 선택 가능하게 필터링
+    filters: [{ name: 'JSON 백업 파일', extensions: ['json'] }],
+    // 파일 1개만 선택 가능
+    properties: ['openFile'],
+  });
+
+  // 취소했거나 파일 선택 안 했으면 종료
+  if (canceled || filePaths.length === 0) return { success: false };
+
+  try {
+    // 선택한 파일 읽기
+    // encoding: 'utf-8' 로 문자열로 읽어요
+    const data = fs.readFileSync(filePaths[0], 'utf-8');
+    return { success: true, data };
+  } catch (err) {
+    console.error('파일 읽기 실패:', err);
     return { success: false, error: String(err) };
   }
 });

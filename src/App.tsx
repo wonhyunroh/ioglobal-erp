@@ -11,6 +11,7 @@
 // 🔗 연결된 파일들:
 //   - Login.tsx: 로그인 화면
 //   - Users.tsx: 계정 관리 화면
+//   - Backup.tsx: 백업/복원 화면
 //   - Dashboard.tsx, Partners.tsx, Items.tsx,
 //     Orders.tsx, Inventory.tsx, CostCalc.tsx: 각 메뉴 페이지
 //   - db.ts: loadUsers, updateLastLogin
@@ -25,19 +26,26 @@ import Inventory  from './pages/Inventory';
 import CostCalc   from './pages/CostCalc';
 import Login      from './pages/Login';
 import Users      from './pages/Users';
+import Backup     from './pages/Backup';
 import { User, loadUsers, updateLastLogin } from './db';
 
 // ──────────────────────────────────────────────
 // 사이드바 메뉴 목록
+//
+// id: 메뉴 식별자 (renderPage 함수에서 사용)
+// label: 화면에 표시되는 메뉴 이름
+// icon: 메뉴 아이콘 (이모지)
+// adminOnly: true 면 관리자만 볼 수 있어요
 // ──────────────────────────────────────────────
 const MENUS = [
-  { id: 'dashboard',  label: '대시보드',    icon: '📊' },
-  { id: 'partners',   label: '거래처 관리', icon: '🏢' },
-  { id: 'items',      label: '품목 관리',   icon: '🌽' },
-  { id: 'orders',     label: '주문 관리',   icon: '📋' },
-  { id: 'inventory',  label: '재고 관리',   icon: '📦' },
-  { id: 'costcalc',   label: '수입원가 계산', icon: '💰' },
-  { id: 'users',      label: '계정 관리',   icon: '👤' },
+  { id: 'dashboard',  label: '대시보드',    icon: '📊', adminOnly: false },
+  { id: 'partners',   label: '거래처 관리', icon: '🏢', adminOnly: false },
+  { id: 'items',      label: '품목 관리',   icon: '🌽', adminOnly: false },
+  { id: 'orders',     label: '주문 관리',   icon: '📋', adminOnly: false },
+  { id: 'inventory',  label: '재고 관리',   icon: '📦', adminOnly: false },
+  { id: 'costcalc',   label: '수입원가 계산', icon: '💰', adminOnly: false },
+  { id: 'users',      label: '계정 관리',   icon: '👤', adminOnly: true  },
+  { id: 'backup',     label: '백업 / 복원', icon: '🗄️', adminOnly: true  },
 ];
 
 export default function App() {
@@ -62,7 +70,8 @@ export default function App() {
 
   // ── 로그인 처리 ──
   const handleLogin = async (user: User) => {
-    await updateLastLogin(user.id); // 마지막 로그인 시간 업데이트
+    // 마지막 로그인 시간 업데이트
+    await updateLastLogin(user.id);
     const updated = { ...user, lastLogin: new Date().toLocaleString('ko-KR') };
     setCurrentUser(updated);
     setActiveMenu('dashboard');
@@ -84,6 +93,7 @@ export default function App() {
       case 'inventory':  return <Inventory />;
       case 'costcalc':   return <CostCalc />;
       case 'users':      return <Users currentUser={currentUser!} />;
+      case 'backup':     return <Backup currentUser={currentUser!} />;
       default:           return <Dashboard />;
     }
   };
@@ -114,8 +124,8 @@ export default function App() {
         {/* 메뉴 목록 */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {MENUS.map(menu => {
-            // 계정 관리는 관리자만 표시
-            if (menu.id === 'users' && currentUser.role !== '관리자') return null;
+            // adminOnly 메뉴는 관리자만 표시해요
+            if (menu.adminOnly && currentUser.role !== '관리자') return null;
             return (
               <button
                 key={menu.id}
@@ -137,6 +147,7 @@ export default function App() {
         {/* 로그인 유저 정보 + 로그아웃 */}
         <div className="px-4 py-4 border-t border-gray-100">
           <div className="flex items-center gap-2 mb-3">
+            {/* 유저 아바타 (이름 첫 글자) */}
             <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center
                             justify-center text-sm font-bold text-blue-600">
               {currentUser.username.slice(0, 1)}
@@ -148,6 +159,7 @@ export default function App() {
               <p className="text-xs text-gray-400">{currentUser.role}</p>
             </div>
           </div>
+          {/* 로그아웃 버튼 */}
           <button
             onClick={handleLogout}
             className="w-full text-xs text-gray-500 hover:text-red-500
