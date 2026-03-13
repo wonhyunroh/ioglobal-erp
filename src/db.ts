@@ -181,3 +181,56 @@ export const generateId = (list: { id: number }[]): number => {
     ? Math.max(...list.map(item => item.id)) + 1
     : 1;
 };
+
+
+// ──────────────────────────────────────────────
+// 👤 유저 관련 타입 및 함수
+// ──────────────────────────────────────────────
+
+// 유저 타입
+export type User = {
+  id: number;
+  username: string;    // 아이디 (직원 이름)
+  password: string;    // 비밀번호
+  role: '관리자' | '일반직원';
+  lastLogin: string;   // 마지막 로그인 시간
+};
+
+// 저장 키 추가
+export const USER_STORE_KEY = 'users';
+
+// 기본 관리자 계정
+const DEFAULT_ADMIN: User = {
+  id: 1,
+  username: 'admin',
+  password: '1234',
+  role: '관리자',
+  lastLogin: '',
+};
+
+// 유저 목록 불러오기
+// 저장된 유저가 없으면 기본 관리자 계정 반환
+export const loadUsers = async (): Promise<User[]> => {
+  try {
+    const data = await window.electronAPI.storeGet(USER_STORE_KEY);
+    if (!data || data.length === 0) return [DEFAULT_ADMIN];
+    return data;
+  } catch {
+    return [DEFAULT_ADMIN];
+  }
+};
+
+// 유저 목록 저장
+export const saveUsers = async (users: User[]): Promise<void> => {
+  await window.electronAPI.storeSet(USER_STORE_KEY, users);
+};
+
+// 마지막 로그인 시간 업데이트
+export const updateLastLogin = async (userId: number): Promise<void> => {
+  const users = await loadUsers();
+  const now = new Date().toLocaleString('ko-KR');
+  const updated = users.map(u =>
+    u.id === userId ? { ...u, lastLogin: now } : u
+  );
+  await saveUsers(updated);
+};
