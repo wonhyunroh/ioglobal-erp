@@ -26,12 +26,21 @@ import {
 } from '../db';
 import { exportOrders, exportDailyShipments } from '../excel';
 
-const ORDER_STATUSES = ['견적', '계약', '출고준비', '출고완료', '정산완료'];
+// ── 주문 상태 목록 ──
+// 매입: 견적 → 계약 → 입고 → 입고완료 → 정산완료
+// 매출: 견적 → 계약 → 출고 → 출고완료 → 정산완료
+const ORDER_STATUSES = [
+  '견적', '계약', '입고', '입고완료', '출고', '출고완료', '정산완료'
+];
 
+// ── 주문 상태별 색상 ──
+// 입고 관련은 파란 계열, 출고 관련은 주황 계열로 구분해요
 const STATUS_COLORS: Record<string, string> = {
   '견적':    'bg-gray-100 text-gray-600',
   '계약':    'bg-blue-100 text-blue-700',
-  '출고준비': 'bg-yellow-100 text-yellow-700',
+  '입고':    'bg-indigo-100 text-indigo-700',
+  '입고완료': 'bg-cyan-100 text-cyan-700',
+  '출고':    'bg-yellow-100 text-yellow-700',
   '출고완료': 'bg-orange-100 text-orange-700',
   '정산완료': 'bg-green-100 text-green-700',
 };
@@ -86,10 +95,8 @@ export default function Orders() {
   // ──────────────────────────────────────────────
   // 재고 연동 함수
   //
-  // 주문 상태가 변경될 때 재고를 자동으로 업데이트해요
-  //
-  // 매입 주문 → 출고완료(입고) 시 재고 증가
-  // 매출 주문 → 출고완료(출고) 시 재고 감소
+  // 매입 주문 → 입고완료 시 재고 증가
+  // 매출 주문 → 출고완료 시 재고 감소
   //
   // itemName: 주문의 품목명 (재고 품목명과 일치해야 해요)
   // quantity: 주문 수량
@@ -100,11 +107,9 @@ export default function Orders() {
     quantity: number,
     type: '매입' | '매출'
   ): Promise<boolean> => {
-    // 재고에서 품목명이 일치하는 항목 찾기
     const targetIndex = inventory.findIndex(i => i.item === itemName);
 
     if (targetIndex === -1) {
-      // 재고에 해당 품목이 없으면 경고
       alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.\n재고 관리에서 품목을 먼저 등록해주세요.`);
       return false;
     }
@@ -113,7 +118,6 @@ export default function Orders() {
 
     if (type === '매출') {
       // ── 매출 주문 출고완료 시 재고 차감 ──
-      // 재고가 부족하면 차단해요
       if (target.current < quantity) {
         alert(
           `⚠️ 재고 부족!\n` +
@@ -125,7 +129,6 @@ export default function Orders() {
         return false;
       }
 
-      // 확인 팝업
       const confirmed = window.confirm(
         `📤 재고 차감 확인\n\n` +
         `품목: ${itemName}\n` +
@@ -136,7 +139,6 @@ export default function Orders() {
       );
       if (!confirmed) return false;
 
-      // 재고 차감
       const updated = [...inventory];
       updated[targetIndex] = {
         ...target,
@@ -147,8 +149,7 @@ export default function Orders() {
       await saveInventory(updated);
 
     } else {
-      // ── 매입 주문 출고완료(입고) 시 재고 증가 ──
-      // 확인 팝업
+      // ── 매입 주문 입고완료 시 재고 증가 ──
       const confirmed = window.confirm(
         `📥 재고 증가 확인\n\n` +
         `품목: ${itemName}\n` +
@@ -159,7 +160,6 @@ export default function Orders() {
       );
       if (!confirmed) return false;
 
-      // 재고 증가
       const updated = [...inventory];
       updated[targetIndex] = {
         ...target,
@@ -199,16 +199,39 @@ export default function Orders() {
   // ──────────────────────────────────────────────
   // 주문 저장 함수
   //
-  // 주문 상태가 출고완료로 변경될 때 재고 연동을 실행해요
-  // 재고 연동 실패 시 주문 상태 변경을 취소해요
+  // 매입 주문 → 입고완료 변경 시 재고 증가
+  // 매출 주문 → 출고완료 변경 시 재고 차감
+  // 이미 해당 상태면 재고 연동 안 해요 (중복 방지)
   // ──────────────────────────────────────────────
   const handleSave = async () => {
     if (!formData.partner.trim()) { alert('거래처를 입력해주세요!'); return; }
     if (!formData.item.trim())    { alert('품목을 입력해주세요!'); return; }
     if (formData.quantity <= 0)   { alert('수량은 0보다 커야 해요!'); return; }
 
-    // ── 재고 부족 시 매출 주문 등록 차단 ──
-    // 새 주문이고 매출 유형이면 재고 확인
+    // ── 매입 주문 → 입고완료 변경 시 재고 증가 ──
+    const isBuyingComplete =
+      formData.type === '매입' &&
+      editingOrder?.status !== '입고완료' &&
+      formData.status === '입고완료';
+
+    // ── 매출 주문 → 출고완료 변경 시 재고 차감 ──
+    const isSellingComplete =
+      formData.type === '매출' &&
+      editingOrder?.status !== '출고완료' &&
+      formData.status === '출고완료';
+
+    // ── 수정 시 재고 연동 (입고완료 or 출고완료로 변경될 때만) ──
+    if (editingOrder && (isBuyingComplete || isSellingComplete)) {
+      const success = await syncInventory(
+        formData.item,
+        formData.quantity,
+        isBuyingComplete ? '매입' : '매출',
+      );
+      if (!success) return;
+    }
+
+    // ── 재고 부족 시 새 매출 주문 등록 차단 ──
+    // 새 주문일 때만 체크해요 (수정 시엔 syncInventory에서 체크)
     if (!editingOrder && formData.type === '매출') {
       const target = inventory.find(i => i.item === formData.item);
       if (target && target.current < formData.quantity) {
@@ -221,22 +244,6 @@ export default function Orders() {
         );
         return;
       }
-    }
-
-    // ── 출고완료로 상태 변경 시 재고 연동 ──
-    // 기존 주문의 상태가 출고완료로 바뀌는 경우에만 실행해요
-    if (
-      editingOrder &&
-      editingOrder.status !== '출고완료' &&
-      formData.status === '출고완료'
-    ) {
-      const success = await syncInventory(
-        formData.item,
-        formData.quantity,
-        formData.type,
-      );
-      // 재고 연동 실패 또는 취소 시 저장 중단
-      if (!success) return;
     }
 
     const total = formData.quantity * formData.price;
@@ -276,40 +283,27 @@ export default function Orders() {
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
 
-        {/* ── 버튼 그룹 ── */}
         <div className="flex gap-2">
-
-          {/* 일출고 저장 버튼
-              오늘 날짜 기준으로 출고완료 상태인 주문만 엑셀로 저장해요
-              납기일(dueDate)이 오늘인 주문 중 출고완료인 것만 포함돼요 */}
           <button
             onClick={() =>
-              exportDailyShipments(
-                orders,
-                new Date().toISOString().split('T')[0]
-              )
+              exportDailyShipments(orders, new Date().toISOString().split('T')[0])
             }
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📥 일출고 저장
           </button>
-
-          {/* 전체 주문 목록 엑셀 저장 버튼 */}
           <button
             onClick={() => exportOrders(orders)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
           </button>
-
-          {/* 주문 추가 버튼 */}
           <button
             onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm">
             + 주문 추가
           </button>
-
         </div>
       </div>
 
@@ -464,12 +458,10 @@ export default function Orders() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   품목 <span className="text-red-500">*</span>
-                  {/* 재고 연동 안내 */}
                   <span className="text-xs text-blue-500 ml-2">
                     (재고 품목명과 정확히 일치해야 연동돼요)
                   </span>
                 </label>
-                {/* 재고 품목 드롭다운 + 직접 입력 */}
                 <input type="text" name="item"
                   value={formData.item} onChange={handleChange}
                   placeholder="예: 옥수수 (미국산)"
@@ -477,7 +469,6 @@ export default function Orders() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {/* 재고 품목 자동완성 목록 */}
                 <datalist id="inventory-items">
                   {inventory.map(i => (
                     <option key={i.id} value={i.item} />
@@ -517,7 +508,7 @@ export default function Orders() {
                 </span>
               </div>
 
-              {/* 재고 현황 표시 (품목 입력 시 실시간으로 보여줘요) */}
+              {/* 재고 현황 실시간 표시 */}
               {formData.item && (() => {
                 const stock = inventory.find(i => i.item === formData.item);
                 if (!stock) return null;

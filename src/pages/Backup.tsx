@@ -146,7 +146,7 @@ export default function Backup({ currentUser }: Props) {
   const handleRestore = async () => {
     // 복원 전 경고
     if (!window.confirm(
-      '⚠️ 복원 시 현재 모든 데이터가 백업 파일로 덮어써져요!\n\n' +
+      '⚠️ 복원 시 현재 모든 데이터가 백업 파일로 업데이트됩니다!\n\n' +
       '현재 데이터를 먼저 백업하셨나요?\n\n' +
       '계속하시겠어요?'
     )) return;
