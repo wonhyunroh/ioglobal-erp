@@ -5,14 +5,25 @@
 // 🎯 이 파일의 역할:
 //   - 주문 관리 화면이에요
 //   - 매입/매출 주문을 등록하고 상태를 관리해요
+//   - 주문 상태 변경 시 재고와 자동 연동돼요:
+//     * 매입 주문 → 입고완료 시 재고 자동 증가
+//     * 매출 주문 → 출고완료 시 재고 자동 차감
+//     * 재고 부족 시 매출 주문 등록 차단
 //   - 데이터는 electron-store에 저장돼서 앱 껐다 켜도 유지돼요
 //
 // 🔗 연결된 파일들:
-//   - db.ts: loadOrders, saveOrders, generateId
+//   - db.ts: loadOrders, saveOrders, loadInventory,
+//            saveInventory, generateId
+//   - excel.ts: exportOrders, exportDailyShipments
 // ──────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
-import { Order, loadOrders, saveOrders, generateId } from '../db';
+import {
+  Order, InventoryItem,
+  loadOrders, saveOrders,
+  loadInventory, saveInventory,
+  generateId,
+} from '../db';
 import { exportOrders, exportDailyShipments } from '../excel';
 
 const ORDER_STATUSES = ['견적', '계약', '출고준비', '출고완료', '정산완료'];
@@ -47,28 +58,120 @@ const EMPTY_ORDER: Omit<Order, 'id' | 'total'> = {
 
 export default function Orders() {
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders]       = useState<Order[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
-  const [formData, setFormData] = useState<Omit<Order, 'id' | 'total'>>(EMPTY_ORDER);
+  const [formData, setFormData]   = useState<Omit<Order, 'id' | 'total'>>(EMPTY_ORDER);
   const [filterStatus, setFilterStatus] = useState('전체');
-  const [filterType, setFilterType] = useState('전체');
-  const [loaded, setLoaded] = useState(false);
+  const [filterType, setFilterType]     = useState('전체');
+  const [loaded, setLoaded]       = useState(false);
 
-  // ── 앱 시작 시 저장된 주문 불러오기 ──
+  // ── 앱 시작 시 주문 + 재고 같이 불러오기 ──
   useEffect(() => {
     const load = async () => {
-      const data = await loadOrders();
-      setOrders(data);
+      const [o, i] = await Promise.all([loadOrders(), loadInventory()]);
+      setOrders(o);
+      setInventory(i);
     };
     load();
   }, []);
 
-  // ── 주문 목록이 바뀔 때마다 자동 저장 ──
+  // ── 주문 목록 바뀔 때마다 자동 저장 ──
   useEffect(() => {
     if (!loaded) { setLoaded(true); return; }
     saveOrders(orders);
   }, [orders]);
+
+  // ──────────────────────────────────────────────
+  // 재고 연동 함수
+  //
+  // 주문 상태가 변경될 때 재고를 자동으로 업데이트해요
+  //
+  // 매입 주문 → 출고완료(입고) 시 재고 증가
+  // 매출 주문 → 출고완료(출고) 시 재고 감소
+  //
+  // itemName: 주문의 품목명 (재고 품목명과 일치해야 해요)
+  // quantity: 주문 수량
+  // type: 매입(재고증가) or 매출(재고감소)
+  // ──────────────────────────────────────────────
+  const syncInventory = async (
+    itemName: string,
+    quantity: number,
+    type: '매입' | '매출'
+  ): Promise<boolean> => {
+    // 재고에서 품목명이 일치하는 항목 찾기
+    const targetIndex = inventory.findIndex(i => i.item === itemName);
+
+    if (targetIndex === -1) {
+      // 재고에 해당 품목이 없으면 경고
+      alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.\n재고 관리에서 품목을 먼저 등록해주세요.`);
+      return false;
+    }
+
+    const target = inventory[targetIndex];
+
+    if (type === '매출') {
+      // ── 매출 주문 출고완료 시 재고 차감 ──
+      // 재고가 부족하면 차단해요
+      if (target.current < quantity) {
+        alert(
+          `⚠️ 재고 부족!\n` +
+          `품목: ${itemName}\n` +
+          `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
+          `출고 수량: ${quantity.toLocaleString()} ${target.unit}\n\n` +
+          `재고가 부족해서 출고완료로 변경할 수 없어요.`
+        );
+        return false;
+      }
+
+      // 확인 팝업
+      const confirmed = window.confirm(
+        `📤 재고 차감 확인\n\n` +
+        `품목: ${itemName}\n` +
+        `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
+        `차감 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
+        `차감 후 재고: ${(target.current - quantity).toLocaleString()} ${target.unit}\n\n` +
+        `재고를 차감할까요?`
+      );
+      if (!confirmed) return false;
+
+      // 재고 차감
+      const updated = [...inventory];
+      updated[targetIndex] = {
+        ...target,
+        current: target.current - quantity,
+        lastUpdated: today(),
+      };
+      setInventory(updated);
+      await saveInventory(updated);
+
+    } else {
+      // ── 매입 주문 출고완료(입고) 시 재고 증가 ──
+      // 확인 팝업
+      const confirmed = window.confirm(
+        `📥 재고 증가 확인\n\n` +
+        `품목: ${itemName}\n` +
+        `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
+        `입고 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
+        `입고 후 재고: ${(target.current + quantity).toLocaleString()} ${target.unit}\n\n` +
+        `재고를 증가할까요?`
+      );
+      if (!confirmed) return false;
+
+      // 재고 증가
+      const updated = [...inventory];
+      updated[targetIndex] = {
+        ...target,
+        current: target.current + quantity,
+        lastUpdated: today(),
+      };
+      setInventory(updated);
+      await saveInventory(updated);
+    }
+
+    return true;
+  };
 
   const handleAdd = () => {
     setEditingOrder(null);
@@ -93,10 +196,49 @@ export default function Orders() {
     setOrders(prev => prev.filter(o => o.id !== id));
   };
 
-  const handleSave = () => {
+  // ──────────────────────────────────────────────
+  // 주문 저장 함수
+  //
+  // 주문 상태가 출고완료로 변경될 때 재고 연동을 실행해요
+  // 재고 연동 실패 시 주문 상태 변경을 취소해요
+  // ──────────────────────────────────────────────
+  const handleSave = async () => {
     if (!formData.partner.trim()) { alert('거래처를 입력해주세요!'); return; }
-    if (!formData.item.trim()) { alert('품목을 입력해주세요!'); return; }
-    if (formData.quantity <= 0) { alert('수량은 0보다 커야 해요!'); return; }
+    if (!formData.item.trim())    { alert('품목을 입력해주세요!'); return; }
+    if (formData.quantity <= 0)   { alert('수량은 0보다 커야 해요!'); return; }
+
+    // ── 재고 부족 시 매출 주문 등록 차단 ──
+    // 새 주문이고 매출 유형이면 재고 확인
+    if (!editingOrder && formData.type === '매출') {
+      const target = inventory.find(i => i.item === formData.item);
+      if (target && target.current < formData.quantity) {
+        alert(
+          `⚠️ 재고 부족으로 주문 등록 불가!\n\n` +
+          `품목: ${formData.item}\n` +
+          `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
+          `주문 수량: ${formData.quantity.toLocaleString()} ${target.unit}\n\n` +
+          `재고를 먼저 확보해주세요.`
+        );
+        return;
+      }
+    }
+
+    // ── 출고완료로 상태 변경 시 재고 연동 ──
+    // 기존 주문의 상태가 출고완료로 바뀌는 경우에만 실행해요
+    if (
+      editingOrder &&
+      editingOrder.status !== '출고완료' &&
+      formData.status === '출고완료'
+    ) {
+      const success = await syncInventory(
+        formData.item,
+        formData.quantity,
+        formData.type,
+      );
+      // 재고 연동 실패 또는 취소 시 저장 중단
+      if (!success) return;
+    }
+
     const total = formData.quantity * formData.price;
     if (editingOrder) {
       setOrders(prev =>
@@ -122,7 +264,7 @@ export default function Orders() {
 
   const filteredOrders = orders.filter(o => {
     const matchStatus = filterStatus === '전체' || o.status === filterStatus;
-    const matchType = filterType === '전체' || o.type === filterType;
+    const matchType   = filterType === '전체' || o.type === filterType;
     return matchStatus && matchType;
   });
 
@@ -133,7 +275,8 @@ export default function Orders() {
           <h2 className="text-2xl font-bold text-gray-800">📋 주문 관리</h2>
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
-                {/* ── 버튼 그룹 ── */}
+
+        {/* ── 버튼 그룹 ── */}
         <div className="flex gap-2">
 
           {/* 일출고 저장 버튼
@@ -143,7 +286,7 @@ export default function Orders() {
             onClick={() =>
               exportDailyShipments(
                 orders,
-                new Date().toISOString().split('T')[0] // 오늘 날짜 (예: 2026-03-12)
+                new Date().toISOString().split('T')[0]
               )
             }
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
@@ -151,8 +294,7 @@ export default function Orders() {
             📥 일출고 저장
           </button>
 
-          {/* 전체 주문 목록 엑셀 저장 버튼
-              현재 필터와 상관없이 전체 주문을 저장해요 */}
+          {/* 전체 주문 목록 엑셀 저장 버튼 */}
           <button
             onClick={() => exportOrders(orders)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
@@ -322,13 +464,25 @@ export default function Orders() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   품목 <span className="text-red-500">*</span>
+                  {/* 재고 연동 안내 */}
+                  <span className="text-xs text-blue-500 ml-2">
+                    (재고 품목명과 정확히 일치해야 연동돼요)
+                  </span>
                 </label>
+                {/* 재고 품목 드롭다운 + 직접 입력 */}
                 <input type="text" name="item"
                   value={formData.item} onChange={handleChange}
                   placeholder="예: 옥수수 (미국산)"
+                  list="inventory-items"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                {/* 재고 품목 자동완성 목록 */}
+                <datalist id="inventory-items">
+                  {inventory.map(i => (
+                    <option key={i.id} value={i.item} />
+                  ))}
+                </datalist>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -355,11 +509,35 @@ export default function Orders() {
 
               {/* 총액 자동 계산 */}
               <div className="bg-blue-50 rounded-lg px-4 py-3">
-                <span className="text-sm text-blue-700 font-medium">총액 (자동계산): </span>
-                <span className="text-lg font-bold text-blue-800">
+                <span className="text-sm text-blue-700 font-medium">
+                  총액 (자동계산):
+                </span>
+                <span className="text-lg font-bold text-blue-800 ml-2">
                   ₩{(formData.quantity * formData.price).toLocaleString()}
                 </span>
               </div>
+
+              {/* 재고 현황 표시 (품목 입력 시 실시간으로 보여줘요) */}
+              {formData.item && (() => {
+                const stock = inventory.find(i => i.item === formData.item);
+                if (!stock) return null;
+                const isLow = stock.minStock > 0 && stock.current <= stock.minStock;
+                return (
+                  <div className={`rounded-lg px-4 py-3 text-sm
+                    ${isLow
+                      ? 'bg-red-50 border border-red-200'
+                      : 'bg-green-50 border border-green-200'
+                    }`}>
+                    <span className={isLow ? 'text-red-700' : 'text-green-700'}>
+                      {isLow ? '⚠️' : '📦'} 현재 재고:
+                      <span className="font-bold ml-1">
+                        {stock.current.toLocaleString()} {stock.unit}
+                      </span>
+                      {isLow && ' (재고 부족!)'}
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -394,7 +572,9 @@ export default function Orders() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">메모</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  메모
+                </label>
                 <textarea name="memo" value={formData.memo} onChange={handleChange}
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
