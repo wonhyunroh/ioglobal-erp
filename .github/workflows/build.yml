@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write   # Release 생성 권한
+
 jobs:
   build-windows:
     name: Windows 빌드
