@@ -14,9 +14,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import { Database } from 'node-sqlite3-wasm';
+import Database from 'better-sqlite3';
 
-export function createCostRouter(db: InstanceType<typeof Database>) {
+export function createCostRouter(db: Database.Database) {
   const router = Router();
 
   // ── 전체 고정비용 목록 조회 ──
@@ -40,7 +40,7 @@ export function createCostRouter(db: InstanceType<typeof Database>) {
       const result = db.prepare(`
         INSERT INTO cost_fixed_fees (name, amount, memo)
         VALUES (?, ?, ?)
-      `).run([name, amount ?? 0, memo ?? '']);
+      `).run(name, amount ?? 0, memo ?? '');
       const created = db.prepare(
         `SELECT * FROM cost_fixed_fees WHERE id = ?`
       ).get(result.lastInsertRowid);
@@ -59,7 +59,7 @@ export function createCostRouter(db: InstanceType<typeof Database>) {
         UPDATE cost_fixed_fees
         SET name=?, amount=?, memo=?
         WHERE id=?
-      `).run([name, amount ?? 0, memo ?? '', req.params.id]);
+      `).run(name, amount ?? 0, memo ?? '', req.params.id);
       const updated = db.prepare(
         `SELECT * FROM cost_fixed_fees WHERE id = ?`
       ).get(req.params.id);

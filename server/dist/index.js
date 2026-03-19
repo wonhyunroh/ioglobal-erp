@@ -1,3 +1,4 @@
+"use strict";
 // ──────────────────────────────────────────────
 // 📁 파일명: index.ts
 // 📌 위치: server/src/index.ts
@@ -7,45 +8,43 @@
 //   - Express 웹 서버를 실행하고 모든 API를 등록해요
 //   - SQLite 데이터베이스를 초기화하고 테이블을 생성해요
 // ──────────────────────────────────────────────
-
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.db = void 0;
 // ── import는 항상 맨 위에! ──
-import express  from 'express';
-import cors     from 'cors';
-import Database from 'better-sqlite3';
-import path     from 'path';
-import fs       from 'fs';
-import { createPartnersRouter }  from './routes/partners';
-import { createItemsRouter }     from './routes/items';
-import { createOrdersRouter }    from './routes/orders';
-import { createInventoryRouter } from './routes/inventory';
-import { createUsersRouter }     from './routes/users';
-import { createCostRouter }      from './routes/cost';
-import { createRatesRouter }     from './routes/rates';
-import { createBackupRouter }    from './routes/backup';
-
-const app  = express();
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const node_sqlite3_wasm_1 = require("node-sqlite3-wasm");
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+const partners_1 = require("./routes/partners");
+const items_1 = require("./routes/items");
+const orders_1 = require("./routes/orders");
+const inventory_1 = require("./routes/inventory");
+const users_1 = require("./routes/users");
+const cost_1 = require("./routes/cost");
+const rates_1 = require("./routes/rates");
+const backup_1 = require("./routes/backup");
+const app = (0, express_1.default)();
 // Railway는 PORT 환경변수를 자동으로 설정해요
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4000;
-
 // ── 미들웨어 ──
-app.use(cors());
-app.use(express.json());
-
+app.use((0, cors_1.default)());
+app.use(express_1.default.json());
 // ──────────────────────────────────────────────
 // 데이터베이스 초기화
 // ──────────────────────────────────────────────
 // DATA_DIR 환경변수 → Railway 볼륨 경로 (/data)
-// Railway 환경이면 /tmp (항상 쓰기 가능)
 // 없으면 로컬 server/data 폴더 사용
-const dataDir = process.env.DATA_DIR ||
-  (process.env.RAILWAY_ENVIRONMENT ? '/tmp' : path.join(__dirname, '..', 'data'));
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const dataDir = process.env.DATA_DIR || path_1.default.join(__dirname, '..', 'data');
+if (!fs_1.default.existsSync(dataDir)) {
+    fs_1.default.mkdirSync(dataDir, { recursive: true });
 }
-
-const db = new Database(path.join(dataDir, 'ioglobal.db'));
-db.pragma('journal_mode = WAL');
-
+const db = new node_sqlite3_wasm_1.Database(path_1.default.join(dataDir, 'ioglobal.db'));
+exports.db = db;
+db.exec('PRAGMA journal_mode = WAL');
 // ──────────────────────────────────────────────
 // 테이블 생성
 // ──────────────────────────────────────────────
@@ -133,82 +132,75 @@ db.exec(`
   );
 
 `);
-
 // ── items 테이블 컬럼 마이그레이션 ──
 // DB가 이미 존재하는 경우 price, origin 컬럼이 없을 수 있어요
 // ALTER TABLE은 이미 컬럼이 있으면 에러가 나서 try/catch로 처리해요
-try { db.exec(`ALTER TABLE items ADD COLUMN price REAL NOT NULL DEFAULT 0`); } catch {}
-try { db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); } catch {}
-
+try {
+    db.exec(`ALTER TABLE items ADD COLUMN price REAL NOT NULL DEFAULT 0`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
+}
+catch { }
 // ── 기본 관리자 계정 생성 ──
-const adminExists = db.prepare(
-  `SELECT id FROM users WHERE username = 'admin'`
-).get();
-
+const adminExists = db.prepare(`SELECT id FROM users WHERE username = 'admin'`).get();
 if (!adminExists) {
-  db.prepare(`
+    db.prepare(`
     INSERT INTO users (username, password, role)
     VALUES ('admin', '1234', '관리자')
   `).run();
-  console.log('✅ 기본 관리자 계정 생성: admin / 1234');
+    console.log('✅ 기본 관리자 계정 생성: admin / 1234');
 }
-
 // ── 기본 계산 기준율 삽입 ──
 const defaultRates = [
-  { key: 'LC_OPEN_RATE',         value: 0.012,   label: 'LC 개설이율',   unit: '율' },
-  { key: 'LC_OPEN_DAYS',         value: 90,       label: 'LC 개설기간',   unit: '일' },
-  { key: 'INSURANCE_RATE',       value: 0.001236, label: '보험요율',      unit: '율' },
-  { key: 'INSURANCE_FACTOR',     value: 1.1,      label: '보험부보율',    unit: '배' },
-  { key: 'IMPORT_INTEREST_RATE', value: 0.0175,   label: '수입이자율',    unit: '율' },
-  { key: 'IMPORT_INTEREST_DAYS', value: 120,      label: '수입이자기간',  unit: '일' },
-  { key: 'TERM_CG_RATE',         value: 0.018,    label: 'TERM CG 이율', unit: '율' },
-  { key: 'TERM_CG_DAYS',         value: 150,      label: 'TERM CG 기간', unit: '일' },
-  { key: 'CUSTOMS_RATE1',        value: 0.10,     label: '통관수수료율1', unit: '율' },
-  { key: 'CUSTOMS_RATE2',        value: 0.007,    label: '통관수수료율2', unit: '율' },
-  { key: 'LOSS_RATE',            value: 0.003,    label: '감모손실율',    unit: '율' },
-  { key: 'WORK_FEE_PER_TON',     value: 13000,    label: '작업비',        unit: '원/톤' },
+    { key: 'LC_OPEN_RATE', value: 0.012, label: 'LC 개설이율', unit: '율' },
+    { key: 'LC_OPEN_DAYS', value: 90, label: 'LC 개설기간', unit: '일' },
+    { key: 'INSURANCE_RATE', value: 0.001236, label: '보험요율', unit: '율' },
+    { key: 'INSURANCE_FACTOR', value: 1.1, label: '보험부보율', unit: '배' },
+    { key: 'IMPORT_INTEREST_RATE', value: 0.0175, label: '수입이자율', unit: '율' },
+    { key: 'IMPORT_INTEREST_DAYS', value: 120, label: '수입이자기간', unit: '일' },
+    { key: 'TERM_CG_RATE', value: 0.018, label: 'TERM CG 이율', unit: '율' },
+    { key: 'TERM_CG_DAYS', value: 150, label: 'TERM CG 기간', unit: '일' },
+    { key: 'CUSTOMS_RATE1', value: 0.10, label: '통관수수료율1', unit: '율' },
+    { key: 'CUSTOMS_RATE2', value: 0.007, label: '통관수수료율2', unit: '율' },
+    { key: 'LOSS_RATE', value: 0.003, label: '감모손실율', unit: '율' },
+    { key: 'WORK_FEE_PER_TON', value: 13000, label: '작업비', unit: '원/톤' },
 ];
-
 const insertRate = db.prepare(`
   INSERT OR IGNORE INTO calc_rates (key, value, label, unit)
   VALUES (?, ?, ?, ?)
 `);
-
 for (const r of defaultRates) {
-  insertRate.run(r.key, r.value, r.label, r.unit);
+    insertRate.run([r.key, r.value, r.label, r.unit]);
 }
 console.log('✅ 계산 기준율 기본값 설정 완료');
-
 // ── API 라우터 등록 ──
-app.use('/api/partners',  createPartnersRouter(db));
-app.use('/api/items',     createItemsRouter(db));
-app.use('/api/orders',    createOrdersRouter(db));
-app.use('/api/inventory', createInventoryRouter(db));
-app.use('/api/users',     createUsersRouter(db));
-app.use('/api/cost',      createCostRouter(db));
-app.use('/api/rates',     createRatesRouter(db));
-app.use('/api/backup',   createBackupRouter(db));
-
+app.use('/api/partners', (0, partners_1.createPartnersRouter)(db));
+app.use('/api/items', (0, items_1.createItemsRouter)(db));
+app.use('/api/orders', (0, orders_1.createOrdersRouter)(db));
+app.use('/api/inventory', (0, inventory_1.createInventoryRouter)(db));
+app.use('/api/users', (0, users_1.createUsersRouter)(db));
+app.use('/api/cost', (0, cost_1.createCostRouter)(db));
+app.use('/api/rates', (0, rates_1.createRatesRouter)(db));
+app.use('/api/backup', (0, backup_1.createBackupRouter)(db));
 // ── 서버 상태 확인 API ──
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'IO Global ERP 서버가 정상 실행 중이에요 🌾',
-    time: new Date().toLocaleString('ko-KR'),
-  });
+    res.json({
+        status: 'ok',
+        message: 'IO Global ERP 서버가 정상 실행 중이에요 🌾',
+        time: new Date().toLocaleString('ko-KR'),
+    });
 });
-
 // ── 서버 시작 ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('');
-  console.log('🌾 IO Global ERP 서버 시작!');
-  console.log(`📡 주소: http://localhost:${PORT}`);
-  console.log(`📡 외부: http://[이 PC의 IP]:${PORT}`);
-  console.log('');
-  console.log('💡 이 PC의 IP 확인 방법:');
-  console.log('   Windows: ipconfig → IPv4 주소');
-  console.log('   Mac: ifconfig | grep inet');
-  console.log('');
+    console.log('');
+    console.log('🌾 IO Global ERP 서버 시작!');
+    console.log(`📡 주소: http://localhost:${PORT}`);
+    console.log(`📡 외부: http://[이 PC의 IP]:${PORT}`);
+    console.log('');
+    console.log('💡 이 PC의 IP 확인 방법:');
+    console.log('   Windows: ipconfig → IPv4 주소');
+    console.log('   Mac: ifconfig | grep inet');
+    console.log('');
 });
-
-export { db };

@@ -14,9 +14,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import { Database } from 'node-sqlite3-wasm';
+import Database from 'better-sqlite3';
 
-export function createItemsRouter(db: InstanceType<typeof Database>) {
+export function createItemsRouter(db: Database.Database) {
   const router = Router();
 
   // ── 전체 품목 목록 조회 ──
@@ -38,9 +38,9 @@ export function createItemsRouter(db: InstanceType<typeof Database>) {
       const result = db.prepare(`
         INSERT INTO items (name, category, unit, price, origin, memo)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run([
+      `).run(
         name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? ''
-      ]);
+      );
       const created = db.prepare(`SELECT * FROM items WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
     } catch (e) {
@@ -57,10 +57,10 @@ export function createItemsRouter(db: InstanceType<typeof Database>) {
         UPDATE items
         SET name=?, category=?, unit=?, price=?, origin=?, memo=?
         WHERE id=?
-      `).run([
+      `).run(
         name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? '',
         req.params.id
-      ]);
+      );
       const updated = db.prepare(`SELECT * FROM items WHERE id = ?`).get(req.params.id);
       res.json(updated);
     } catch (e) {

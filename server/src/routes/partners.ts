@@ -14,9 +14,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import { Database } from 'node-sqlite3-wasm';
+import Database from 'better-sqlite3';
 
-export function createPartnersRouter(db: InstanceType<typeof Database>) {
+export function createPartnersRouter(db: Database.Database) {
   const router = Router();
 
   // ── 전체 거래처 목록 조회 ──
@@ -38,10 +38,10 @@ export function createPartnersRouter(db: InstanceType<typeof Database>) {
       const result = db.prepare(`
         INSERT INTO partners (name, type, country, contact, email, phone, address, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run([
+      `).run(
         name, type ?? '매입처', country ?? '', contact ?? '',
         email ?? '', phone ?? '', address ?? '', memo ?? ''
-      ]);
+      );
       // 방금 추가한 거래처 전체 데이터 반환
       const created = db.prepare(`SELECT * FROM partners WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
@@ -59,11 +59,11 @@ export function createPartnersRouter(db: InstanceType<typeof Database>) {
         UPDATE partners
         SET name=?, type=?, country=?, contact=?, email=?, phone=?, address=?, memo=?
         WHERE id=?
-      `).run([
+      `).run(
         name, type, country ?? '', contact ?? '',
         email ?? '', phone ?? '', address ?? '', memo ?? '',
         req.params.id
-      ]);
+      );
       const updated = db.prepare(`SELECT * FROM partners WHERE id = ?`).get(req.params.id);
       res.json(updated);
     } catch (e) {
