@@ -11,7 +11,7 @@
 // ── import는 항상 맨 위에! ──
 import express  from 'express';
 import cors     from 'cors';
-import Database from 'better-sqlite3';
+import { Database } from 'node-sqlite3-wasm';
 import path     from 'path';
 import fs       from 'fs';
 import { createPartnersRouter }  from './routes/partners';
@@ -42,7 +42,7 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const db = new Database(path.join(dataDir, 'ioglobal.db'));
-db.pragma('journal_mode = WAL');
+db.exec('PRAGMA journal_mode = WAL');
 
 // ──────────────────────────────────────────────
 // 테이블 생성
@@ -173,7 +173,7 @@ const insertRate = db.prepare(`
 `);
 
 for (const r of defaultRates) {
-  insertRate.run(r.key, r.value, r.label, r.unit);
+  insertRate.run([r.key, r.value, r.label, r.unit]);
 }
 console.log('✅ 계산 기준율 기본값 설정 완료');
 

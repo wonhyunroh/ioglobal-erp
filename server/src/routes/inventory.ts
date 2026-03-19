@@ -14,9 +14,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import Database   from 'better-sqlite3';
+import { Database } from 'node-sqlite3-wasm';
 
-export function createInventoryRouter(db: Database.Database) {
+export function createInventoryRouter(db: InstanceType<typeof Database>) {
   const router = Router();
 
   // ── 전체 재고 목록 조회 ──
@@ -38,12 +38,12 @@ export function createInventoryRouter(db: Database.Database) {
       const result = db.prepare(`
         INSERT INTO inventory (item, category, unit, current, minStock, lastUpdated, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `).run([
         item, category ?? '', unit ?? '',
         current ?? 0, minStock ?? 0,
         lastUpdated ?? new Date().toISOString().split('T')[0],
         memo ?? ''
-      );
+      ]);
       const created = db.prepare(`SELECT * FROM inventory WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
     } catch (e) {
@@ -60,13 +60,13 @@ export function createInventoryRouter(db: Database.Database) {
         UPDATE inventory
         SET item=?, category=?, unit=?, current=?, minStock=?, lastUpdated=?, memo=?
         WHERE id=?
-      `).run(
+      `).run([
         item, category ?? '', unit ?? '',
         current ?? 0, minStock ?? 0,
         lastUpdated ?? new Date().toISOString().split('T')[0],
         memo ?? '',
         req.params.id
-      );
+      ]);
       const updated = db.prepare(`SELECT * FROM inventory WHERE id = ?`).get(req.params.id);
       res.json(updated);
     } catch (e) {

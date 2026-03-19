@@ -14,9 +14,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import Database   from 'better-sqlite3';
+import { Database } from 'node-sqlite3-wasm';
 
-export function createOrdersRouter(db: Database.Database) {
+export function createOrdersRouter(db: InstanceType<typeof Database>) {
   const router = Router();
 
   // ── 전체 주문 목록 조회 ──
@@ -45,12 +45,12 @@ export function createOrdersRouter(db: Database.Database) {
           (orderNo, partner, item, quantity, price, total,
            orderDate, dueDate, type, status, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `).run([
         orderNo ?? '', partner, item,
         quantity ?? 0, price ?? 0, total,
         orderDate ?? '', dueDate ?? '',
         type ?? '매입', status ?? '견적', memo ?? ''
-      );
+      ]);
       const created = db.prepare(`SELECT * FROM orders WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
     } catch (e) {
@@ -73,13 +73,13 @@ export function createOrdersRouter(db: Database.Database) {
         SET orderNo=?, partner=?, item=?, quantity=?, price=?, total=?,
             orderDate=?, dueDate=?, type=?, status=?, memo=?
         WHERE id=?
-      `).run(
+      `).run([
         orderNo ?? '', partner, item,
         quantity ?? 0, price ?? 0, total,
         orderDate ?? '', dueDate ?? '',
         type ?? '매입', status ?? '견적', memo ?? '',
         req.params.id
-      );
+      ]);
       const updated = db.prepare(`SELECT * FROM orders WHERE id = ?`).get(req.params.id);
       res.json(updated);
     } catch (e) {

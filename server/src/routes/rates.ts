@@ -13,9 +13,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import Database   from 'better-sqlite3';
+import { Database } from 'node-sqlite3-wasm';
 
-export function createRatesRouter(db: Database.Database) {
+export function createRatesRouter(db: InstanceType<typeof Database>) {
   const router = Router();
 
   // ── 전체 기준율 목록 조회 ──
@@ -41,7 +41,7 @@ export function createRatesRouter(db: Database.Database) {
       const { value } = req.body;
       db.prepare(`
         UPDATE calc_rates SET value = ? WHERE key = ?
-      `).run(value, req.params.key);
+      `).run([value, req.params.key]);
       const updated = db.prepare(
         `SELECT * FROM calc_rates WHERE key = ?`
       ).get(req.params.key);

@@ -11,9 +11,9 @@
 // ──────────────────────────────────────────────
 
 import { Router } from 'express';
-import Database   from 'better-sqlite3';
+import { Database } from 'node-sqlite3-wasm';
 
-export function createBackupRouter(db: Database.Database) {
+export function createBackupRouter(db: InstanceType<typeof Database>) {
   const router = Router();
 
   // ── 전체 데이터 백업 ──
@@ -52,8 +52,8 @@ export function createBackupRouter(db: Database.Database) {
       const { partners, items, orders, inventory, users, cost, rates } = req.body;
 
       // ── 트랜잭션으로 묶어서 실패 시 롤백 ──
-      const doRestore = db.transaction(() => {
-
+      db.exec('BEGIN');
+      try {
         // ── 기존 데이터 전부 삭제 ──
         db.prepare('DELETE FROM partners').run();
         db.prepare('DELETE FROM items').run();
@@ -70,11 +70,11 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `);
           for (const p of partners) {
-            stmt.run(
+            stmt.run([
               p.id, p.name, p.type ?? '매입처',
               p.country ?? '', p.contact ?? '', p.email ?? '',
               p.phone ?? '', p.address ?? '', p.memo ?? '', p.createdAt ?? ''
-            );
+            ]);
           }
         }
 
@@ -86,10 +86,10 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?, ?, ?)
           `);
           for (const i of items) {
-            stmt.run(
+            stmt.run([
               i.id, i.name, i.category ?? '', i.unit ?? '',
               i.spec ?? '', i.memo ?? '', i.createdAt ?? ''
-            );
+            ]);
           }
         }
 
@@ -102,13 +102,13 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `);
           for (const o of orders) {
-            stmt.run(
+            stmt.run([
               o.id, o.orderNo, o.partner, o.item,
               o.quantity ?? 0, o.price ?? 0, o.total ?? 0,
               o.orderDate ?? '', o.dueDate ?? '',
               o.type ?? '매입', o.status ?? '견적',
               o.memo ?? '', o.createdAt ?? ''
-            );
+            ]);
           }
         }
 
@@ -120,11 +120,11 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `);
           for (const i of inventory) {
-            stmt.run(
+            stmt.run([
               i.id, i.item, i.category ?? '', i.unit ?? '',
               i.current ?? 0, i.minStock ?? 0,
               i.lastUpdated ?? '', i.memo ?? ''
-            );
+            ]);
           }
         }
 
@@ -136,10 +136,10 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?, ?)
           `);
           for (const u of users) {
-            stmt.run(
+            stmt.run([
               u.id, u.username, u.password, u.role ?? '일반직원',
               u.lastLogin ?? '', u.createdAt ?? ''
-            );
+            ]);
           }
         }
 
@@ -150,7 +150,7 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?)
           `);
           for (const c of cost) {
-            stmt.run(c.id, c.name, c.amount ?? 0, c.memo ?? '');
+            stmt.run([c.id, c.name, c.amount ?? 0, c.memo ?? '']);
           }
         }
 
@@ -161,12 +161,15 @@ export function createBackupRouter(db: Database.Database) {
             VALUES (?, ?, ?, ?, ?)
           `);
           for (const r of rates) {
-            stmt.run(r.id, r.key, r.value ?? 0, r.label ?? '', r.unit ?? '');
+            stmt.run([r.id, r.key, r.value ?? 0, r.label ?? '', r.unit ?? '']);
           }
         }
-      });
 
-      doRestore();
+        db.exec('COMMIT');
+      } catch (rollbackErr) {
+        db.exec('ROLLBACK');
+        throw rollbackErr;
+      }
       res.json({ success: true });
 
     } catch (e: any) {
