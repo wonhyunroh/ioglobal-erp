@@ -31,6 +31,12 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4000;
 app.use(cors());
 app.use(express.json());
 
+// ── 요청 로깅 (디버깅용) ──
+app.use((req, _res, next) => {
+  console.log(`[REQ] ${req.method} ${req.path}`);
+  next();
+});
+
 // ──────────────────────────────────────────────
 // 데이터베이스 초기화
 // ──────────────────────────────────────────────
