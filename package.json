@@ -18,6 +18,7 @@
     "email": "wonhyun2@illinois.edu"
   },
   "license": "MIT",
+  "repository": "https://github.com/wonhyunroh/ioglobal-erp",
   "devDependencies": {
     "@babel/core": "^7.29.0",
     "@babel/preset-react": "^7.28.5",
@@ -59,8 +60,10 @@
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^8.2.0",
     "express": "^5.2.1",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "update-electron-app": "^3.1.2",
     "xlsx": "^0.18.5"
   }
 }

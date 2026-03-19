@@ -28,6 +28,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as fs from 'fs';
 import { startServer } from './server';
+import { updateElectronApp } from 'update-electron-app';
 
 import Store from 'electron-store';
 const store = new Store<Record<string, unknown>>();
@@ -37,6 +38,11 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
 if (require('electron-squirrel-startup')) {
   app.quit();
+}
+
+// 자동 업데이트 (배포된 앱에서만 작동)
+if (app.isPackaged) {
+  updateElectronApp();
 }
 
 const createWindow = (): void => {
