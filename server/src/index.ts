@@ -35,8 +35,10 @@ app.use(express.json());
 // 데이터베이스 초기화
 // ──────────────────────────────────────────────
 // DATA_DIR 환경변수 → Railway 볼륨 경로 (/data)
+// Railway 환경이면 /tmp (항상 쓰기 가능)
 // 없으면 로컬 server/data 폴더 사용
-const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const dataDir = process.env.DATA_DIR ||
+  (process.env.RAILWAY_ENVIRONMENT ? '/tmp' : path.join(__dirname, '..', 'data'));
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
