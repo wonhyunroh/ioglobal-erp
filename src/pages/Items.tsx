@@ -13,7 +13,7 @@
 // ──────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
-import { Item, loadItems, saveItems, generateId } from '../db';
+import { Item, loadItems, saveItem, updateItem, deleteItem } from '../db';
 import { exportItems } from '../excel';
 
 const CATEGORIES = [
@@ -34,8 +34,6 @@ export default function Items() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(EMPTY_ITEM);
-  const [loaded, setLoaded] = useState(false);
-
   // ── 앱 시작 시 저장된 품목 불러오기 ──
   useEffect(() => {
     const load = async () => {
@@ -45,11 +43,6 @@ export default function Items() {
     load();
   }, []);
 
-  // ── 품목 목록이 바뀔 때마다 자동 저장 ──
-  useEffect(() => {
-    if (!loaded) { setLoaded(true); return; }
-    saveItems(items);
-  }, [items]);
 
   const handleAdd = () => {
     setEditingItem(null);
@@ -67,21 +60,34 @@ export default function Items() {
     setShowModal(true);
   };
 
-  const handleDelete = (id: number) => {
+  // ── 품목 삭제: 서버에 DELETE 요청 후 목록에서 제거 ──
+  const handleDelete = async (id: number) => {
     if (!window.confirm('정말 삭제하시겠어요?')) return;
-    setItems(prev => prev.filter(i => i.id !== id));
+    try {
+      await deleteItem(id);
+      setItems(prev => prev.filter(i => i.id !== id));
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
+    }
   };
 
-  const handleSave = () => {
+  // ── 품목 저장 (추가/수정): 서버에 POST/PUT 요청 ──
+  const handleSave = async () => {
     if (!formData.name.trim()) { alert('품목명을 입력해주세요!'); return; }
-    if (editingItem) {
-      setItems(prev =>
-        prev.map(i => i.id === editingItem.id ? { ...i, ...formData } : i)
-      );
-    } else {
-      setItems(prev => [...prev, { id: generateId(prev), ...formData }]);
+    try {
+      if (editingItem) {
+        // 수정: PUT 요청 후 목록 업데이트
+        const updated = await updateItem(editingItem.id, formData);
+        setItems(prev => prev.map(i => i.id === editingItem.id ? updated : i));
+      } else {
+        // 추가: POST 요청 후 목록에 추가
+        const created = await saveItem(formData);
+        setItems(prev => [...prev, created]);
+      }
+      setShowModal(false);
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
     }
-    setShowModal(false);
   };
 
   const handleChange = (

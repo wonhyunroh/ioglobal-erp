@@ -34,12 +34,12 @@ export function createItemsRouter(db: Database.Database) {
   // POST /api/items
   router.post('/', (req, res) => {
     try {
-      const { name, category, unit, spec, memo } = req.body;
+      const { name, category, unit, price, origin, memo } = req.body;
       const result = db.prepare(`
-        INSERT INTO items (name, category, unit, spec, memo)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO items (name, category, unit, price, origin, memo)
+        VALUES (?, ?, ?, ?, ?, ?)
       `).run(
-        name, category ?? '', unit ?? '', spec ?? '', memo ?? ''
+        name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? ''
       );
       const created = db.prepare(`SELECT * FROM items WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
@@ -52,13 +52,13 @@ export function createItemsRouter(db: Database.Database) {
   // PUT /api/items/:id
   router.put('/:id', (req, res) => {
     try {
-      const { name, category, unit, spec, memo } = req.body;
+      const { name, category, unit, price, origin, memo } = req.body;
       db.prepare(`
         UPDATE items
-        SET name=?, category=?, unit=?, spec=?, memo=?
+        SET name=?, category=?, unit=?, price=?, origin=?, memo=?
         WHERE id=?
       `).run(
-        name, category ?? '', unit ?? '', spec ?? '', memo ?? '',
+        name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? '',
         req.params.id
       );
       const updated = db.prepare(`SELECT * FROM items WHERE id = ?`).get(req.params.id);

@@ -20,9 +20,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Order, InventoryItem,
-  loadOrders, saveOrders,
-  loadInventory, saveInventory,
-  generateId,
+  loadOrders, saveOrder, updateOrder, deleteOrder,
+  loadInventory, saveInventory, saveInventoryItem,
 } from '../db';
 import { exportOrders, exportDailyShipments } from '../excel';
 
@@ -74,8 +73,6 @@ export default function Orders() {
   const [formData, setFormData]   = useState<Omit<Order, 'id' | 'total'>>(EMPTY_ORDER);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterType, setFilterType]     = useState('전체');
-  const [loaded, setLoaded]       = useState(false);
-
   // ── 앱 시작 시 주문 + 재고 같이 불러오기 ──
   useEffect(() => {
     const load = async () => {
@@ -85,12 +82,6 @@ export default function Orders() {
     };
     load();
   }, []);
-
-  // ── 주문 목록 바뀔 때마다 자동 저장 ──
-  useEffect(() => {
-    if (!loaded) { setLoaded(true); return; }
-    saveOrders(orders);
-  }, [orders]);
 
   // ──────────────────────────────────────────────
   // 재고 연동 함수
@@ -102,6 +93,12 @@ export default function Orders() {
   // quantity: 주문 수량
   // type: 매입(재고증가) or 매출(재고감소)
   // ──────────────────────────────────────────────
+  // ──────────────────────────────────────────────
+  // 재고 연동 함수
+  //
+  // 매입 입고완료 → 재고 증가 (없으면 자동 생성)
+  // 매출 출고완료 → 재고 차감 (재고 부족 시 차단)
+  // ──────────────────────────────────────────────
   const syncInventory = async (
     itemName: string,
     quantity: number,
@@ -109,15 +106,61 @@ export default function Orders() {
   ): Promise<boolean> => {
     const targetIndex = inventory.findIndex(i => i.item === itemName);
 
-    if (targetIndex === -1) {
-      alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.\n재고 관리에서 품목을 먼저 등록해주세요.`);
-      return false;
-    }
+    if (type === '매입') {
+      // ── 매입: 재고에 없으면 자동 생성 ──
+      if (targetIndex === -1) {
+        const confirmed = window.confirm(
+          `📦 재고 자동 등록\n\n` +
+          `재고 목록에 "${itemName}" 품목이 없어요.\n` +
+          `입고 수량 ${quantity.toLocaleString()}톤으로 재고를 새로 등록할까요?\n\n` +
+          `(단위·최소재고는 재고 관리에서 수정 가능해요)`
+        );
+        if (!confirmed) return false;
 
-    const target = inventory[targetIndex];
+        // 재고 신규 생성 → 서버에 저장
+        const newItem = await saveInventoryItem({
+          item:        itemName,
+          category:    '',
+          unit:        '톤',
+          current:     quantity,
+          minStock:    0,
+          lastUpdated: today(),
+          memo:        '주문 입고완료로 자동 등록',
+        });
+        setInventory(prev => [...prev, newItem]);
+        return true;
+      }
 
-    if (type === '매출') {
-      // ── 매출 주문 출고완료 시 재고 차감 ──
+      // ── 매입: 기존 재고에 수량 추가 ──
+      const target = inventory[targetIndex];
+      const confirmed = window.confirm(
+        `📥 재고 증가 확인\n\n` +
+        `품목: ${itemName}\n` +
+        `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
+        `입고 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
+        `입고 후 재고: ${(target.current + quantity).toLocaleString()} ${target.unit}\n\n` +
+        `재고를 증가할까요?`
+      );
+      if (!confirmed) return false;
+
+      const updated = [...inventory];
+      updated[targetIndex] = {
+        ...target,
+        current: target.current + quantity,
+        lastUpdated: today(),
+      };
+      setInventory(updated);
+      await saveInventory(updated);
+
+    } else {
+      // ── 매출: 재고에 없으면 차단 ──
+      if (targetIndex === -1) {
+        alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.\n재고 관리에서 품목을 먼저 등록해주세요.`);
+        return false;
+      }
+
+      // ── 매출: 재고 부족 시 차단 ──
+      const target = inventory[targetIndex];
       if (target.current < quantity) {
         alert(
           `⚠️ 재고 부족!\n` +
@@ -147,27 +190,6 @@ export default function Orders() {
       };
       setInventory(updated);
       await saveInventory(updated);
-
-    } else {
-      // ── 매입 주문 입고완료 시 재고 증가 ──
-      const confirmed = window.confirm(
-        `📥 재고 증가 확인\n\n` +
-        `품목: ${itemName}\n` +
-        `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
-        `입고 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
-        `입고 후 재고: ${(target.current + quantity).toLocaleString()} ${target.unit}\n\n` +
-        `재고를 증가할까요?`
-      );
-      if (!confirmed) return false;
-
-      const updated = [...inventory];
-      updated[targetIndex] = {
-        ...target,
-        current: target.current + quantity,
-        lastUpdated: today(),
-      };
-      setInventory(updated);
-      await saveInventory(updated);
     }
 
     return true;
@@ -191,9 +213,15 @@ export default function Orders() {
     setShowModal(true);
   };
 
-  const handleDelete = (id: number) => {
+  // ── 주문 삭제: 서버에 DELETE 요청 후 목록에서 제거 ──
+  const handleDelete = async (id: number) => {
     if (!window.confirm('정말 삭제하시겠어요?')) return;
-    setOrders(prev => prev.filter(o => o.id !== id));
+    try {
+      await deleteOrder(id);
+      setOrders(prev => prev.filter(o => o.id !== id));
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
+    }
   };
 
   // ──────────────────────────────────────────────
@@ -220,8 +248,9 @@ export default function Orders() {
       editingOrder?.status !== '출고완료' &&
       formData.status === '출고완료';
 
-    // ── 수정 시 재고 연동 (입고완료 or 출고완료로 변경될 때만) ──
-    if (editingOrder && (isBuyingComplete || isSellingComplete)) {
+    // ── 재고 연동 (신규 주문 + 수정 모두 처리) ──
+    // 입고완료 or 출고완료 상태일 때만 실행해요
+    if (isBuyingComplete || isSellingComplete) {
       const success = await syncInventory(
         formData.item,
         formData.quantity,
@@ -230,33 +259,21 @@ export default function Orders() {
       if (!success) return;
     }
 
-    // ── 재고 부족 시 새 매출 주문 등록 차단 ──
-    // 새 주문일 때만 체크해요 (수정 시엔 syncInventory에서 체크)
-    if (!editingOrder && formData.type === '매출') {
-      const target = inventory.find(i => i.item === formData.item);
-      if (target && target.current < formData.quantity) {
-        alert(
-          `⚠️ 재고 부족으로 주문 등록 불가!\n\n` +
-          `품목: ${formData.item}\n` +
-          `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
-          `주문 수량: ${formData.quantity.toLocaleString()} ${target.unit}\n\n` +
-          `재고를 먼저 확보해주세요.`
-        );
-        return;
-      }
-    }
-
     const total = formData.quantity * formData.price;
-    if (editingOrder) {
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === editingOrder.id ? { ...o, ...formData, total } : o
-        )
-      );
-    } else {
-      setOrders(prev => [...prev, { id: generateId(prev), ...formData, total }]);
+    try {
+      if (editingOrder) {
+        // 수정: PUT 요청 후 목록 업데이트
+        const updated = await updateOrder(editingOrder.id, { ...formData, total });
+        setOrders(prev => prev.map(o => o.id === editingOrder.id ? updated : o));
+      } else {
+        // 추가: POST 요청 후 목록에 추가
+        const created = await saveOrder({ ...formData, total });
+        setOrders(prev => [...prev, created]);
+      }
+      setShowModal(false);
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
     }
-    setShowModal(false);
   };
 
   const handleChange = (

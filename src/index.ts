@@ -11,33 +11,23 @@
 // 📦 사용하는 것들:
 //   - electron: 데스크톱 앱 프레임워크
 //   - electron-store: 로컬 데이터 저장소
-//     (앱 껐다 켜도 데이터가 유지돼요)
 //   - fs: 파일 시스템 (엑셀/백업 파일 저장 시 사용)
 //   - dialog: 파일 저장/열기 다이얼로그
 //
 // 🔗 통신 구조:
 //   React(렌더러) ←→ preload.ts ←→ index.ts(메인)
-//   - 렌더러에서 데이터 저장/불러오기 요청
-//   - 메인에서 electron-store로 실제 저장/불러오기
-//
-// ⚠️ 수정할 때 주의사항:
-//   - IPC 채널 추가 시 preload.ts에도 같이 추가해야 해요
-//   - store.get/set의 키 이름을 일관되게 유지해요
 //
 // 📦 IPC 채널 목록:
 //   store-get    → 저장된 데이터 불러오기
 //   store-set    → 데이터 저장하기
 //   store-delete → 데이터 삭제하기
-//   save-file    → 파일 저장 다이얼로그 (엑셀/백업 저장 시 사용)
-//   open-file    → 파일 열기 다이얼로그 (백업 복원 시 사용)
+//   save-file    → 파일 저장 다이얼로그
+//   open-file    → 파일 열기 다이얼로그
 // ──────────────────────────────────────────────
 
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as fs from 'fs';
 
-// electron-store: 로컬 파일에 JSON 형태로 데이터를 저장해요
-// 마치 브라우저의 localStorage 같은 역할이에요
-// 저장 위치: ~/Library/Application Support/ioglobal-erp/config.json (Mac 기준)
 import Store from 'electron-store';
 const store = new Store<Record<string, unknown>>();
 
@@ -50,12 +40,10 @@ if (require('electron-squirrel-startup')) {
 
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
-    // ── 창 크기 설정 ──
-    // ERP 화면이 넓어야 해서 1280x800으로 설정
     height: 800,
     width: 1280,
-    minWidth: 1024,   // 최소 너비 (이보다 작으면 레이아웃이 깨져요)
-    minHeight: 600,   // 최소 높이
+    minWidth: 1024,
+    minHeight: 600,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
@@ -63,15 +51,24 @@ const createWindow = (): void => {
     },
   });
 
-  // ── 외부 API 호출 허용 ──
-  // 환율 API (open.er-api.com) 호출을 위해 CSP 설정을 변경해요
-  // 기본 CSP는 외부 API 호출을 막기 때문에 여기서 허용해줘요
+  // ──────────────────────────────────────────────
+  // CSP 설정
+  //
+  // 외부 API 호출을 허용해요:
+  //   - https://open.er-api.com  → 실시간 환율 API
+  //   - http://localhost:3000    → 로컬 ERP 서버
+  //   - http://127.0.0.1:3000   → 로컬 ERP 서버 (IP 방식)
+  // ──────────────────────────────────────────────
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://open.er-api.com"
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+          "connect-src 'self' " +
+          "https://open.er-api.com " +
+          "http://localhost:4000 " +
+          "http://127.0.0.1:4000"
         ]
       }
     });
@@ -80,33 +77,25 @@ const createWindow = (): void => {
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
   // 개발 중에만 개발자 도구 자동으로 열기
-  // 배포 시에는 이 줄을 주석 처리하거나 삭제하면 돼요
   mainWindow.webContents.openDevTools();
 };
 
 // ──────────────────────────────────────────────
 // IPC 채널 설정
-//
-// IPC = Inter-Process Communication (프로세스 간 통신)
-// React(렌더러 프로세스)와 이 파일(메인 프로세스)이
-// 서로 데이터를 주고받는 통로예요
 // ──────────────────────────────────────────────
 
 // ── 데이터 불러오기 ──
-// React에서 storeGet('키') 호출 시 여기서 처리해요
 ipcMain.handle('store-get', (_event, key: string) => {
   return store.store[key];
 });
 
 // ── 데이터 저장하기 ──
-// React에서 storeSet('키', 값) 호출 시 여기서 처리해요
 ipcMain.handle('store-set', (_event, key: string, value: unknown) => {
   store.store = { ...store.store, [key]: value };
   return true;
 });
 
 // ── 데이터 삭제하기 ──
-// React에서 storeDelete('키') 호출 시 여기서 처리해요
 ipcMain.handle('store-delete', (_event, key: string) => {
   const s = { ...store.store };
   delete s[key];
@@ -118,33 +107,29 @@ ipcMain.handle('store-delete', (_event, key: string) => {
 // 파일 저장 다이얼로그 IPC 채널
 //
 // 엑셀/백업 저장 시 "다른 이름으로 저장" 창을 띄워요
-// 사용자가 원하는 위치에 파일을 저장할 수 있어요
-//
-// 동작 순서:
-//   1. 렌더러(excel.ts / Backup.tsx)에서 파일 저장 요청
-//   2. 메인 프로세스에서 저장 다이얼로그 띄우기
-//   3. 사용자가 위치/파일명 선택
-//   4. 선택한 경로에 파일 저장
 // ──────────────────────────────────────────────
 ipcMain.handle('save-file', async (_event, filename: string, buffer: number[]) => {
-  // 저장 다이얼로그 띄우기
-  // defaultPath: 기본 파일명 (예: 거래처목록_20260312.xlsx)
+  // 파일명 확장자에 따라 필터 순서 결정
+  // JSON 파일이면 JSON 필터를 먼저, 아니면 Excel 필터를 먼저
+  const isJson = filename.endsWith('.json');
+  const filters = isJson
+    ? [
+        { name: 'JSON 백업 파일', extensions: ['json'] },
+        { name: 'Excel 파일',     extensions: ['xlsx'] },
+      ]
+    : [
+        { name: 'Excel 파일',     extensions: ['xlsx'] },
+        { name: 'JSON 백업 파일', extensions: ['json'] },
+      ];
+
   const { filePath, canceled } = await dialog.showSaveDialog({
     defaultPath: filename,
-    filters: [
-      // 파일 확장자에 따라 필터 자동 적용
-      // xlsx → Excel 파일, json → JSON 파일
-      { name: 'Excel 파일', extensions: ['xlsx'] },
-      { name: 'JSON 백업 파일', extensions: ['json'] },
-    ],
+    filters,
   });
 
-  // 취소했으면 success: false 반환
   if (canceled || !filePath) return { success: false };
 
   try {
-    // 선택한 경로에 파일 저장
-    // Buffer.from(buffer): 바이트 배열을 Node.js Buffer로 변환
     fs.writeFileSync(filePath, Buffer.from(buffer));
     return { success: true, filePath };
   } catch (err) {
@@ -156,29 +141,17 @@ ipcMain.handle('save-file', async (_event, filename: string, buffer: number[]) =
 // ──────────────────────────────────────────────
 // 파일 열기 다이얼로그 IPC 채널
 //
-// 복원 시 백업 JSON 파일을 불러올 때 사용해요
-//
-// 동작 순서:
-//   1. 렌더러(Backup.tsx)에서 파일 열기 요청
-//   2. 메인 프로세스에서 열기 다이얼로그 띄우기
-//   3. 사용자가 JSON 파일 선택
-//   4. 파일 내용을 문자열로 읽어서 반환
+// 백업 복원 시 JSON 파일을 불러올 때 사용해요
 // ──────────────────────────────────────────────
 ipcMain.handle('open-file', async () => {
-  // 파일 열기 다이얼로그 띄우기
   const { filePaths, canceled } = await dialog.showOpenDialog({
-    // JSON 파일만 선택 가능하게 필터링
     filters: [{ name: 'JSON 백업 파일', extensions: ['json'] }],
-    // 파일 1개만 선택 가능
     properties: ['openFile'],
   });
 
-  // 취소했거나 파일 선택 안 했으면 종료
   if (canceled || filePaths.length === 0) return { success: false };
 
   try {
-    // 선택한 파일 읽기
-    // encoding: 'utf-8' 로 문자열로 읽어요
     const data = fs.readFileSync(filePaths[0], 'utf-8');
     return { success: true, data };
   } catch (err) {
@@ -191,17 +164,14 @@ ipcMain.handle('open-file', async () => {
 // 앱 이벤트 핸들러
 // ──────────────────────────────────────────────
 
-// 앱 준비 완료 시 창 생성
 app.on('ready', createWindow);
 
-// 모든 창이 닫히면 앱 종료 (Mac 제외)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// Mac에서 독 아이콘 클릭 시 창 다시 열기
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();

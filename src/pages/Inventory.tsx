@@ -6,26 +6,25 @@
 //   - 재고 관리 화면이에요
 //   - 품목별 현재 재고, 입고/출고 수량을 관리해요
 //   - 재고 부족 품목을 빨간색으로 강조해요
-//   - 데이터는 electron-store에 저장돼서 앱 껐다 켜도 유지돼요
+//
+// 🔄 변경사항:
+//   - 기존: electron-store에 전체 배열 저장
+//   - 변경: 서버 API로 개별 추가/수정/삭제
 //
 // 🔗 연결된 파일들:
-//   - db.ts: loadInventory, saveInventory, generateId
+//   - db.ts: loadInventory, saveInventoryItem,
+//            updateInventoryItem, deleteInventoryItem
+//   - excel.ts: exportInventory
 // ──────────────────────────────────────────────
 
-// ── React 기본 훅 불러오기 ──
-// useState: 화면 상태를 기억하는 기능 (재고 목록, 모달 열림/닫힘 등)
-// useEffect: 앱 시작 시 저장된 데이터를 불러오는 기능
 import React, { useState, useEffect } from 'react';
-
-// ── DB 함수 및 타입 불러오기 ──
-// InventoryItem: 재고 항목 타입
-// loadInventory: electron-store에서 재고 목록 불러오기
-// saveInventory: electron-store에 재고 목록 저장하기
-// generateId: 새 항목 추가 시 고유 ID 생성
-import { InventoryItem, loadInventory, saveInventory, generateId } from '../db';
-
-// ── 엑셀 내보내기 함수 불러오기 ──
-// exportInventory: 전체 재고 목록을 엑셀로 저장
+import {
+  InventoryItem,
+  loadInventory,
+  saveInventoryItem,
+  updateInventoryItem,
+  deleteInventoryItem,
+} from '../db';
 import { exportInventory } from '../excel';
 
 const CATEGORIES = [
@@ -60,9 +59,9 @@ export default function Inventory() {
   const [stockForm, setStockForm] = useState<StockForm>({
     type: '입고', quantity: 0, memo: '',
   });
-  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // ── 앱 시작 시 저장된 재고 불러오기 ──
+  // ── 앱 시작 시 서버에서 재고 목록 불러오기 ──
   useEffect(() => {
     const load = async () => {
       const data = await loadInventory();
@@ -70,12 +69,6 @@ export default function Inventory() {
     };
     load();
   }, []);
-
-  // ── 재고 목록이 바뀔 때마다 자동 저장 ──
-  useEffect(() => {
-    if (!loaded) { setLoaded(true); return; }
-    saveInventory(inventory);
-  }, [inventory]);
 
   const handleAdd = () => {
     setEditingItem(null);
@@ -100,50 +93,71 @@ export default function Inventory() {
     setShowStockModal(true);
   };
 
-  const handleDelete = (id: number) => {
+  // ── 재고 삭제 → 서버에 DELETE 요청 ──
+  const handleDelete = async (id: number) => {
     if (!window.confirm('정말 삭제하시겠어요?')) return;
-    setInventory(prev => prev.filter(i => i.id !== id));
-  };
-
-  const handleSave = () => {
-    if (!formData.item.trim()) { alert('품목명을 입력해주세요!'); return; }
-    if (editingItem) {
-      setInventory(prev =>
-        prev.map(i =>
-          i.id === editingItem.id
-            ? { ...i, ...formData, lastUpdated: today() }
-            : i
-        )
-      );
-    } else {
-      setInventory(prev => [
-        ...prev,
-        { id: generateId(prev), ...formData, lastUpdated: today() }
-      ]);
+    try {
+      await deleteInventoryItem(id);
+      setInventory(prev => prev.filter(i => i.id !== id));
+    } catch (e) {
+      alert('삭제에 실패했어요. 서버가 실행 중인지 확인해주세요.');
     }
-    setShowAddModal(false);
   };
 
-  const handleStockSave = () => {
+  // ── 재고 항목 저장 → 서버에 POST(추가) or PUT(수정) 요청 ──
+  const handleSave = async () => {
+    if (!formData.item.trim()) { alert('품목명을 입력해주세요!'); return; }
+    setSaving(true);
+    try {
+      const data = { ...formData, lastUpdated: today() };
+      if (editingItem) {
+        // 수정: PUT /api/inventory/:id
+        const updated = await updateInventoryItem(editingItem.id, data);
+        setInventory(prev =>
+          prev.map(i => i.id === editingItem.id ? updated : i)
+        );
+      } else {
+        // 추가: POST /api/inventory
+        const created = await saveInventoryItem(data);
+        setInventory(prev => [...prev, created]);
+      }
+      setShowAddModal(false);
+    } catch (e) {
+      alert('저장에 실패했어요. 서버가 실행 중인지 확인해주세요.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── 입고/출고 처리 → 서버에 PUT 요청 ──
+  const handleStockSave = async () => {
     if (!selectedItem) return;
     if (stockForm.quantity <= 0) { alert('수량은 0보다 커야 해요!'); return; }
     if (stockForm.type === '출고' && stockForm.quantity > selectedItem.current) {
       alert(`재고가 부족해요!\n현재 재고: ${selectedItem.current}${selectedItem.unit}`);
       return;
     }
-    setInventory(prev =>
-      prev.map(i => {
-        if (i.id !== selectedItem.id) return i;
-        return {
-          ...i,
-          current: stockForm.type === '입고'
-            ? i.current + stockForm.quantity
-            : i.current - stockForm.quantity,
-          lastUpdated: today(),
-        };
-      })
-    );
-    setShowStockModal(false);
+    setSaving(true);
+    try {
+      const newCurrent = stockForm.type === '입고'
+        ? selectedItem.current + stockForm.quantity
+        : selectedItem.current - stockForm.quantity;
+
+      // 서버에 업데이트된 재고 수량 저장
+      const updated = await updateInventoryItem(selectedItem.id, {
+        ...selectedItem,
+        current: newCurrent,
+        lastUpdated: today(),
+      });
+      setInventory(prev =>
+        prev.map(i => i.id === selectedItem.id ? updated : i)
+      );
+      setShowStockModal(false);
+    } catch (e) {
+      alert('처리에 실패했어요. 서버가 실행 중인지 확인해주세요.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChange = (
@@ -185,30 +199,21 @@ export default function Inventory() {
             )}
           </p>
         </div>
-                {/* ── 버튼 그룹 ── */}
         <div className="flex gap-2">
-
-          {/* 재고 목록 엑셀 저장 버튼
-              현재 재고 전체 목록을 엑셀 파일로 저장해요
-              재고 부족 품목은 상태 컬럼에 '부족'으로 표시돼요 */}
-          <button
-            onClick={() => exportInventory(inventory)}
+          <button onClick={() => exportInventory(inventory)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
           </button>
-
-          {/* 재고 항목 추가 버튼 */}
-          <button
-            onClick={handleAdd}
+          <button onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm">
             + 품목 추가
           </button>
-
         </div>
       </div>
 
+      {/* ── 재고 목록 테이블 ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -261,9 +266,7 @@ export default function Inventory() {
                       {isLowStock(item) ? '⚠️ 부족' : '✅ 정상'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {item.lastUpdated}
-                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{item.lastUpdated}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
                       <button onClick={() => handleStock(item, '입고')}
@@ -280,14 +283,10 @@ export default function Inventory() {
                       </button>
                       <button onClick={() => handleEdit(item)}
                         className="text-blue-600 hover:text-blue-800 text-xs
-                                   font-medium transition-colors">
-                        수정
-                      </button>
+                                   font-medium transition-colors">수정</button>
                       <button onClick={() => handleDelete(item.id)}
                         className="text-red-500 hover:text-red-700 text-xs
-                                   font-medium transition-colors">
-                        삭제
-                      </button>
+                                   font-medium transition-colors">삭제</button>
                     </div>
                   </td>
                 </tr>
@@ -379,10 +378,11 @@ export default function Inventory() {
                            border border-gray-300 rounded-lg hover:bg-gray-50">
                 취소
               </button>
-              <button onClick={handleSave}
+              <button onClick={handleSave} disabled={saving}
                 className="px-4 py-2 text-sm font-medium text-white
-                           bg-blue-600 rounded-lg hover:bg-blue-700">
-                저장
+                           bg-blue-600 rounded-lg hover:bg-blue-700
+                           disabled:opacity-50">
+                {saving ? '저장 중...' : '저장'}
               </button>
             </div>
           </div>
@@ -451,13 +451,14 @@ export default function Inventory() {
                            border border-gray-300 rounded-lg hover:bg-gray-50">
                 취소
               </button>
-              <button onClick={handleStockSave}
+              <button onClick={handleStockSave} disabled={saving}
                 className={`px-4 py-2 text-sm font-medium text-white rounded-lg
+                  disabled:opacity-50
                   ${stockForm.type === '입고'
                     ? 'bg-green-600 hover:bg-green-700'
                     : 'bg-orange-600 hover:bg-orange-700'
                   }`}>
-                {stockForm.type === '입고' ? '입고 처리' : '출고 처리'}
+                {saving ? '처리 중...' : stockForm.type === '입고' ? '입고 처리' : '출고 처리'}
               </button>
             </div>
           </div>

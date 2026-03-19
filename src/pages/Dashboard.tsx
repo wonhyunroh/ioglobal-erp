@@ -30,14 +30,26 @@ export default function Dashboard() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // ── 앱 시작 시 데이터 불러오기 ──
-  useEffect(() => {
-    const load = async () => {
+  // ── 데이터 불러오기 함수 ──
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
       const [o, i] = await Promise.all([loadOrders(), loadInventory()]);
       setOrders(o);
       setInventory(i);
-    };
+    } catch {
+      setError('서버에서 데이터를 불러오지 못했어요. 서버가 실행 중인지 확인해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 앱 시작 시 데이터 불러오기 ──
+  useEffect(() => {
     load();
   }, []);
 
@@ -101,17 +113,54 @@ export default function Dashboard() {
     },
   ];
 
+  // ── 로딩 중 ──
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+        <div className="text-4xl mb-3 animate-spin">⏳</div>
+        <p className="text-sm">데이터를 불러오는 중이에요...</p>
+      </div>
+    );
+  }
+
+  // ── 에러 ──
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <div className="text-4xl mb-3">⚠️</div>
+        <p className="text-sm text-red-500 mb-4">{error}</p>
+        <button
+          onClick={load}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm
+                     hover:bg-blue-600 transition-colors"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* ── 페이지 제목 ── */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-800">📊 대시보드</h2>
-        <p className="text-gray-500 mt-1">
-          {new Date().toLocaleDateString('ko-KR', {
-            year: 'numeric', month: 'long',
-            day: 'numeric', weekday: 'long',
-          })}
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">📊 대시보드</h2>
+          <p className="text-gray-500 mt-1">
+            {new Date().toLocaleDateString('ko-KR', {
+              year: 'numeric', month: 'long',
+              day: 'numeric', weekday: 'long',
+            })}
+          </p>
+        </div>
+        {/* ── 새로고침 버튼 ── */}
+        <button
+          onClick={load}
+          className="px-3 py-2 text-sm text-gray-500 border border-gray-200
+                     rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          🔄 새로고침
+        </button>
       </div>
 
       {/* ── 요약 카드 4개 ── */}

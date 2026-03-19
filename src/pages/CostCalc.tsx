@@ -5,155 +5,124 @@
 // 🎯 이 파일의 역할:
 //   - 수입원가 계산 화면이에요
 //   - 핵심 입력값(B/L량, 수입단가 등)은 매번 새로 입력해요
-//   - 고정 비용은 한번 저장하면 앱 껐다 켜도 유지돼요
+//   - 고정 비용 + 계산 기준율은 서버에서 불러와요 (전직원 공유)
+//   - 관리자만 고정비용/기준율 수정 가능해요
 //   - 환율은 실시간으로 자동으로 불러와요
 //
-// 📦 사용하는 것들:
-//   - React: 화면을 만드는 라이브러리
-//   - useState: 입력값과 계산 결과를 기억하는 기능
-//   - useEffect: 앱 시작 시 저장된 고정비용/환율을 불러오는 기능
-//   - window.electronAPI: electron-store에 데이터 저장/불러오기
-//
 // 🔗 연결된 파일들:
-//   - preload.ts: window.electronAPI 를 제공해요
-//   - index.ts: 실제 store.get/set 처리해요
-//
-// ⚠️ 수정할 때 주의사항:
-//   - 고정비용 저장 키: 'costCalcFixedFees'
-//   - 환율 API: https://open.er-api.com/v6/latest/USD (무료)
-//   - 계산식 변경 시 calcResults 함수만 수정하면 돼요
-//   - 이율/요율은 RATES 상수에서 관리해요
+//   - db.ts: loadCostFixedFees, saveCostFixedFee,
+//            updateCostFixedFee, loadCalcRates, updateCalcRate
+//   - excel.ts: exportCostCalc
+//   - App.tsx: currentUser (관리자 여부 확인)
 // ──────────────────────────────────────────────
 
-// ── React 기본 훅 불러오기 ──
 import React, { useState, useEffect } from 'react';
-
-// ── 엑셀 내보내기 함수 불러오기 ──
-// exportCostCalc: 수입원가 계산 결과를 엑셀로 저장
 import { exportCostCalc } from '../excel';
-
-// ──────────────────────────────────────────────
-// 기준 이율/요율 상수
-// 변경이 필요하면 여기서만 수정하면 돼요
-// ──────────────────────────────────────────────
-const RATES = {
-  LC_OPEN_RATE: 0.012,
-  LC_OPEN_DAYS: 90 / 360,
-  INSURANCE_RATE: 0.001236,
-  INSURANCE_FACTOR: 1.1,
-  IMPORT_INTEREST_RATE: 0.0175,
-  IMPORT_INTEREST_DAYS: 120 / 360,
-  TERM_CG_RATE: 0.018,
-  TERM_CG_DAYS: 150 / 360,
-  CUSTOMS_RATE1: 0.10,
-  CUSTOMS_RATE2: 0.007,
-  LOSS_RATE: 0.003,
-  WORK_FEE_PER_TON: 13000,
-};
+import {
+  CostFixedFee, CalcRate,
+  loadCostFixedFees, saveCostFixedFee, updateCostFixedFee,
+  loadCalcRates, updateCalcRate,
+} from '../db';
 
 // ──────────────────────────────────────────────
 // 핵심 입력값 타입 (매번 새로 입력)
 // ──────────────────────────────────────────────
 type CoreInput = {
-  blQuantity: number;   // B/L 원료량 (톤)
-  importPrice: number;  // 수입단가 (US$/톤)
-  exchangeRate: number; // 환율 (원/달러) - 자동으로 불러와요
-  containers: number;   // 컨테이너 수 (EA)
-  tariffRate: number;   // 관세율 (%)
-  transportFee: number; // 운송료 (원/kg)
-  saleQuantity: number; // 판매수량 (톤)
-  margin: number;       // 마진 (원/kg)
+  blQuantity: number;
+  importPrice: number;
+  exchangeRate: number;
+  containers: number;
+  tariffRate: number;
+  transportFee: number;
+  saleQuantity: number;
+  margin: number;
 };
 
 // ──────────────────────────────────────────────
-// 고정 비용 타입 (한번 저장하면 계속 유지)
+// 고정비용 필드 목록
 // ──────────────────────────────────────────────
-type FixedFees = {
-  telegraphFee: number;
-  amendFee: number;
-  lgFee: number;
-  workTransportFee: number;
-  relocateFee: number;
-  foodInspectRelocate: number;
-  foodInspectFee: number;
-  certFee: number;
-  doFee: number;
-  wharfage: number;
-  cc: number;
-  thc: number;
-  customsDeclare: number;
-  analysisInspect: number;
-};
+const FIXED_FEE_FIELDS = [
+  { label: '전신료',       key: '전신료',      unit: '원' },
+  { label: 'AMEND 수수료', key: 'AMEND수수료', unit: '원' },
+  { label: 'LG 발급비',    key: 'LG발급비',    unit: '원/건' },
+  { label: '작업이적비',   key: '작업이적비',  unit: '원/회' },
+  { label: '식검이적비',   key: '식검이적비',  unit: '원/회' },
+  { label: '식검수수료',   key: '식검수수료',  unit: '원/회' },
+  { label: '검정료',       key: '검정료',      unit: '원' },
+  { label: 'D/O FEE',      key: 'DO_FEE',      unit: '원/건' },
+  { label: 'WHARFAGE',     key: 'WHARFAGE',    unit: '원/EA' },
+  { label: 'C/C',          key: 'CC',          unit: '원/EA' },
+  { label: 'T.H.C',        key: 'THC',         unit: '원/EA' },
+  { label: '수입신고비',   key: '수입신고비',  unit: '원' },
+  { label: '분석검정비',   key: '분석검정비',  unit: '원' },
+];
 
-// ──────────────────────────────────────────────
-// 핵심 입력값 기본값 (0으로 시작)
-// ──────────────────────────────────────────────
 const DEFAULT_CORE: CoreInput = {
-  blQuantity: 0,
-  importPrice: 0,
-  exchangeRate: 0,  // 앱 시작 시 실시간 환율로 자동 채워져요
-  containers: 0,
-  tariffRate: 0,
-  transportFee: 0,
-  saleQuantity: 0,
-  margin: 0,
-};
-
-// ──────────────────────────────────────────────
-// 고정 비용 기본값 (처음 한번만 사용, 이후엔 저장된 값 사용)
-// ──────────────────────────────────────────────
-const DEFAULT_FIXED: FixedFees = {
-  telegraphFee: 0,
-  amendFee: 0,
-  lgFee: 0,
-  workTransportFee: 0,
-  relocateFee: 0,
-  foodInspectRelocate: 0,
-  foodInspectFee: 0,
-  certFee: 0,
-  doFee: 0,
-  wharfage: 0,
-  cc: 0,
-  thc: 0,
-  customsDeclare: 0,
-  analysisInspect: 0,
+  blQuantity: 0, importPrice: 0, exchangeRate: 0,
+  containers: 0, tariffRate: 0, transportFee: 0,
+  saleQuantity: 0, margin: 0,
 };
 
 // ──────────────────────────────────────────────
 // 원가 계산 함수
+//
+// fixedMap: { key → amount } 형태의 고정비용 맵
+// ratesMap: { key → value } 형태의 기준율 맵
 // ──────────────────────────────────────────────
-function calcResults(v: CoreInput, f: FixedFees) {
-  const goodsPrice = v.blQuantity * v.importPrice * v.exchangeRate;
-  const tariff = goodsPrice * (v.tariffRate / 100);
-  const lcOpenFee = goodsPrice * RATES.LC_OPEN_RATE * RATES.LC_OPEN_DAYS;
-  const insurance = goodsPrice * RATES.INSURANCE_RATE * RATES.INSURANCE_FACTOR;
-  const importInterest = goodsPrice * RATES.IMPORT_INTEREST_RATE * RATES.IMPORT_INTEREST_DAYS;
-  const termCg = goodsPrice * RATES.TERM_CG_RATE * RATES.TERM_CG_DAYS;
-  const workFee = v.blQuantity * RATES.WORK_FEE_PER_TON;
+function calcResults(
+  v: CoreInput,
+  fixedMap: Record<string, number>,
+  ratesMap: Record<string, number>
+) {
+  // 기준율 (서버에서 불러온 값, 없으면 기본값 사용)
+  const r = {
+    LC_OPEN_RATE:         ratesMap['LC_OPEN_RATE']         ?? 0.012,
+    LC_OPEN_DAYS:         (ratesMap['LC_OPEN_DAYS']        ?? 90) / 360,
+    INSURANCE_RATE:       ratesMap['INSURANCE_RATE']       ?? 0.001236,
+    INSURANCE_FACTOR:     ratesMap['INSURANCE_FACTOR']     ?? 1.1,
+    IMPORT_INTEREST_RATE: ratesMap['IMPORT_INTEREST_RATE'] ?? 0.0175,
+    IMPORT_INTEREST_DAYS: (ratesMap['IMPORT_INTEREST_DAYS'] ?? 120) / 360,
+    TERM_CG_RATE:         ratesMap['TERM_CG_RATE']         ?? 0.018,
+    TERM_CG_DAYS:         (ratesMap['TERM_CG_DAYS']        ?? 150) / 360,
+    CUSTOMS_RATE1:        ratesMap['CUSTOMS_RATE1']        ?? 0.10,
+    CUSTOMS_RATE2:        ratesMap['CUSTOMS_RATE2']        ?? 0.007,
+    LOSS_RATE:            ratesMap['LOSS_RATE']            ?? 0.003,
+    WORK_FEE_PER_TON:     ratesMap['WORK_FEE_PER_TON']    ?? 13000,
+  };
+
+  const f = (key: string) => fixedMap[key] ?? 0;
+
+  const goodsPrice      = v.blQuantity * v.importPrice * v.exchangeRate;
+  const tariff          = goodsPrice * (v.tariffRate / 100);
+  const lcOpenFee       = goodsPrice * r.LC_OPEN_RATE * r.LC_OPEN_DAYS;
+  const insurance       = goodsPrice * r.INSURANCE_RATE * r.INSURANCE_FACTOR;
+  const importInterest  = goodsPrice * r.IMPORT_INTEREST_RATE * r.IMPORT_INTEREST_DAYS;
+  const termCg          = goodsPrice * r.TERM_CG_RATE * r.TERM_CG_DAYS;
+  const workFee         = v.blQuantity * r.WORK_FEE_PER_TON;
   const foodInspectCount = Math.max(1, Math.ceil(v.containers / 12));
-  const relocate = f.relocateFee * v.containers;
-  const foodRelocate = f.foodInspectRelocate * v.containers;
-  const foodInspect = f.foodInspectFee * foodInspectCount;
-  const doFeeTotal = f.doFee * foodInspectCount;
-  const wharfageTotal = f.wharfage * v.containers;
-  const ccTotal = f.cc * v.containers;
-  const thcTotal = f.thc * v.containers;
-  const customsFee = (goodsPrice + insurance + tariff)
-    * RATES.CUSTOMS_RATE1 * RATES.CUSTOMS_RATE2;
+  const relocate        = f('작업이적비') * v.containers;
+  const foodRelocate    = f('식검이적비') * v.containers;
+  const foodInspect     = f('식검수수료') * foodInspectCount;
+  const doFeeTotal      = f('DO_FEE') * foodInspectCount;
+  const wharfageTotal   = f('WHARFAGE') * v.containers;
+  const ccTotal         = f('CC') * v.containers;
+  const thcTotal        = f('THC') * v.containers;
+  const customsFee      = (goodsPrice + insurance + tariff)
+                          * r.CUSTOMS_RATE1 * r.CUSTOMS_RATE2;
 
   const subtotal =
-    lcOpenFee + f.telegraphFee + f.amendFee + (f.lgFee * foodInspectCount) +
+    lcOpenFee + f('전신료') + f('AMEND수수료') + (f('LG발급비') * foodInspectCount) +
     insurance + goodsPrice + importInterest + termCg +
     workFee + relocate + foodRelocate + foodInspect +
-    f.certFee + doFeeTotal + wharfageTotal + ccTotal + thcTotal +
-    tariff + customsFee + f.customsDeclare + f.analysisInspect;
+    f('검정료') + doFeeTotal + wharfageTotal + ccTotal + thcTotal +
+    tariff + customsFee + f('수입신고비') + f('분석검정비');
 
-  const loss = subtotal * RATES.LOSS_RATE;
-  const total = subtotal + loss;
-  const blQuantityKg = v.blQuantity * 1000;
-  const pricePerKgLoad = blQuantityKg > 0 ? total / blQuantityKg : 0;
+  const loss              = subtotal * r.LOSS_RATE;
+  const total             = subtotal + loss;
+  const blQuantityKg      = v.blQuantity * 1000;
+  const pricePerKgLoad    = blQuantityKg > 0 ? total / blQuantityKg : 0;
   const pricePerKgDelivery = pricePerKgLoad + v.transportFee;
-  const supplyPrice = Math.ceil((pricePerKgDelivery + v.margin) / 10) * 10;
+  const supplyPrice       = Math.ceil((pricePerKgDelivery + v.margin) / 10) * 10;
 
   return {
     goodsPrice, tariff, lcOpenFee, insurance, importInterest, termCg,
@@ -163,79 +132,71 @@ function calcResults(v: CoreInput, f: FixedFees) {
   };
 }
 
-// 숫자를 원화 형식으로 포맷
 const formatKRW = (n: number) => Math.round(n).toLocaleString('ko-KR');
 
 // ──────────────────────────────────────────────
-// electron-store 저장 키
+// Props 타입
+// currentUser: 관리자 여부 확인용
 // ──────────────────────────────────────────────
-const STORE_KEY_FIXED = 'costCalcFixedFees'; // 고정비용 저장 키
+type Props = {
+  currentUser?: { role: string };
+};
 
-export default function CostCalc() {
+export default function CostCalc({ currentUser }: Props) {
 
-  // 핵심 입력값 (매번 새로 입력)
-  const [core, setCore] = useState<CoreInput>(DEFAULT_CORE);
-
-  // 고정 비용 (저장/불러오기)
-  const [fixed, setFixed] = useState<FixedFees>(DEFAULT_FIXED);
-
-  // 고정 비용 편집 중인 임시값
-  // 저장 버튼 누르기 전까지는 실제 fixed에 반영 안 돼요
-  const [fixedDraft, setFixedDraft] = useState<FixedFees>(DEFAULT_FIXED);
-
-  // 고정 비용 패널 열림/닫힘
+  const [core, setCore]           = useState<CoreInput>(DEFAULT_CORE);
+  const [fixedFees, setFixedFees] = useState<CostFixedFee[]>([]);
+  const [rates, setRates]         = useState<CalcRate[]>([]);
+  const [fixedDraft, setFixedDraft]   = useState<Record<string, number>>({});
+  const [ratesDraft, setRatesDraft]   = useState<Record<string, number>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // 고정 비용 편집 모드 여부
+  const [showRates, setShowRates]       = useState(false);
   const [editingFixed, setEditingFixed] = useState(false);
+  const [editingRates, setEditingRates] = useState(false);
+  const [rateLoading, setRateLoading]   = useState(false);
+  const [rateUpdatedAt, setRateUpdatedAt] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  // 환율 로딩 상태
-  const [rateLoading, setRateLoading] = useState(false);
+  // 관리자 여부 확인
+  const isAdmin = currentUser?.role === '관리자';
 
-  // 환율 마지막 업데이트 시간
-  const [rateUpdatedAt, setRateUpdatedAt] = useState<string>('');
-
-  // ──────────────────────────────────────────────
-  // 앱 시작 시 실행
-  // 1. electron-store에서 고정비용 불러오기
-  // 2. 실시간 환율 불러오기
-  // ──────────────────────────────────────────────
+  // ── 앱 시작 시 서버에서 고정비용 + 기준율 불러오기 ──
   useEffect(() => {
-    // 고정비용 불러오기
-    const loadFixed = async () => {
-      try {
-        const saved = await window.electronAPI.storeGet(STORE_KEY_FIXED);
-        if (saved) {
-          // 저장된 값이 있으면 그걸 사용해요
-          setFixed(saved);
-          setFixedDraft(saved);
-        }
-      } catch (err) {
-        console.error('고정비용 불러오기 실패:', err);
-      }
+    const load = async () => {
+      const [fees, rateList] = await Promise.all([
+        loadCostFixedFees(),
+        loadCalcRates(),
+      ]);
+      setFixedFees(fees);
+      setRates(rateList);
     };
-
-    loadFixed();
-    fetchExchangeRate(); // 환율도 바로 불러와요
+    load();
+    fetchExchangeRate();
   }, []);
 
-  // ──────────────────────────────────────────────
-  // 실시간 환율 불러오기
-  //
-  // 무료 환율 API (open.er-api.com) 사용
-  // USD → KRW 환율을 가져와요
-  // ──────────────────────────────────────────────
+  // ── 고정비용 { key → amount } 맵 ──
+  const fixedMap = fixedFees.reduce((acc, fee) => {
+    acc[fee.name] = fee.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // ── 기준율 { key → value } 맵 ──
+  const ratesMap = rates.reduce((acc, r) => {
+    acc[r.key] = r.value;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // ── 실시간 환율 불러오기 ──
   const fetchExchangeRate = async () => {
     setRateLoading(true);
     try {
-      const res = await fetch('https://open.er-api.com/v6/latest/USD');
+      const res  = await fetch('https://open.er-api.com/v6/latest/USD');
       const data = await res.json();
-
       if (data.result === 'success') {
-        const krwRate = data.rates.KRW;
-        // 환율을 핵심 입력값에 자동으로 채워요
-        setCore(prev => ({ ...prev, exchangeRate: Math.round(krwRate * 100) / 100 }));
-        // 마지막 업데이트 시간 저장
+        setCore(prev => ({
+          ...prev,
+          exchangeRate: Math.round(data.rates.KRW * 100) / 100
+        }));
         setRateUpdatedAt(new Date().toLocaleTimeString('ko-KR'));
       }
     } catch (err) {
@@ -245,7 +206,6 @@ export default function CostCalc() {
     }
   };
 
-  // ── 핵심 입력값 변경 핸들러 ──
   const handleCoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setCore(prev => ({
@@ -254,49 +214,83 @@ export default function CostCalc() {
     }));
   };
 
-  // ── 고정비용 편집 중 변경 핸들러 ──
-  const handleFixedDraftChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFixedDraft(prev => ({
-      ...prev,
-      [name]: value === '' ? 0 : parseFloat(value) || 0,
-    }));
+  // ── 고정비용 편집 시작 ──
+  const handleFixedEditStart = () => {
+    const draft: Record<string, number> = {};
+    FIXED_FEE_FIELDS.forEach(f => { draft[f.key] = fixedMap[f.key] ?? 0; });
+    setFixedDraft(draft);
+    setEditingFixed(true);
   };
 
-  // ── 고정비용 저장 버튼 클릭 ──
-  // electron-store에 저장해요 (앱 껐다 켜도 유지)
+  // ── 기준율 편집 시작 ──
+  const handleRatesEditStart = () => {
+    const draft: Record<string, number> = {};
+    rates.forEach(r => { draft[r.key] = r.value; });
+    setRatesDraft(draft);
+    setEditingRates(true);
+  };
+
+  // ── 고정비용 저장 ──
   const handleFixedSave = async () => {
+    setSaving(true);
     try {
-      await window.electronAPI.storeSet(STORE_KEY_FIXED, fixedDraft);
-      setFixed(fixedDraft);   // 실제 계산에 반영
-      setEditingFixed(false); // 편집 모드 종료
-      alert('고정 비용이 저장됐어요! 다음에 앱을 켜도 유지돼요 ✅');
-    } catch (err) {
-      console.error('고정비용 저장 실패:', err);
-      alert('저장에 실패했어요. 다시 시도해주세요.');
+      const updatedFees: CostFixedFee[] = [];
+      for (const field of FIXED_FEE_FIELDS) {
+        const amount   = fixedDraft[field.key] ?? 0;
+        const existing = fixedFees.find(f => f.name === field.key);
+        if (existing) {
+          const updated = await updateCostFixedFee(existing.id, {
+            name: field.key, amount, memo: ''
+          });
+          updatedFees.push(updated);
+        } else {
+          const created = await saveCostFixedFee({
+            name: field.key, amount, memo: ''
+          });
+          updatedFees.push(created);
+        }
+      }
+      setFixedFees(updatedFees);
+      setEditingFixed(false);
+      alert('고정 비용이 저장됐어요! 모든 직원에게 적용돼요 ✅');
+    } catch (e) {
+      alert('저장에 실패했어요. 서버가 실행 중인지 확인해주세요.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ── 고정비용 편집 취소 ──
-  const handleFixedCancel = () => {
-    setFixedDraft(fixed);   // 저장된 값으로 되돌리기
-    setEditingFixed(false);
+  // ── 기준율 저장 ──
+  const handleRatesSave = async () => {
+    setSaving(true);
+    try {
+      const updatedRates: CalcRate[] = [];
+      for (const rate of rates) {
+        const newValue = ratesDraft[rate.key] ?? rate.value;
+        const updated  = await updateCalcRate(rate.key, newValue);
+        updatedRates.push(updated);
+      }
+      setRates(updatedRates);
+      setEditingRates(false);
+      alert('계산 기준율이 저장됐어요! 모든 직원에게 적용돼요 ✅');
+    } catch (e) {
+      alert('저장에 실패했어요. 서버가 실행 중인지 확인해주세요.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // ── 핵심 입력값 초기화 ──
   const handleReset = () => {
-    if (window.confirm('핵심 입력값을 초기화할까요?\n(고정 비용은 유지돼요)')) {
+    if (window.confirm('핵심 입력값을 초기화할까요?\n(고정 비용/기준율은 유지돼요)')) {
       setCore(DEFAULT_CORE);
-      fetchExchangeRate(); // 환율은 다시 불러와요
+      fetchExchangeRate();
     }
   };
 
-  // 계산 결과 (core + fixed 합쳐서 계산)
-  const result = calcResults(core, fixed);
+  const result = calcResults(core, fixedMap, ratesMap);
 
   return (
     <div>
-      {/* ── 페이지 제목 ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">💰 수입원가 계산</h2>
@@ -304,12 +298,7 @@ export default function CostCalc() {
             입력값을 변경하면 모든 항목이 자동으로 계산돼요
           </p>
         </div>
-        {/* ── 버튼 그룹 ── */}
         <div className="flex gap-2">
-
-          {/* 엑셀 저장 버튼
-              현재 입력값과 계산 결과를 엑셀 파일로 저장해요
-              고정비용 항목도 함께 포함돼요 */}
           <button
             onClick={() => exportCostCalc({
               blAmount: core.blQuantity,
@@ -324,36 +313,20 @@ export default function CostCalc() {
               loadingPrice: result.pricePerKgLoad,
               arrivalPrice: result.pricePerKgDelivery,
               supplyPrice: result.supplyPrice,
-              fixedFees: {
-                '전신료': fixed.telegraphFee,
-                'AMEND 수수료': fixed.amendFee,
-                'LG 발급비': fixed.lgFee,
-                '작업이적비': fixed.relocateFee,
-                '식검이적비': fixed.foodInspectRelocate,
-                '식검수수료': fixed.foodInspectFee,
-                '검정료': fixed.certFee,
-                'D/O FEE': fixed.doFee,
-                'WHARFAGE': fixed.wharfage,
-                'C/C': fixed.cc,
-                'T.H.C': fixed.thc,
-                '수입신고비': fixed.customsDeclare,
-                '분석검정비': fixed.analysisInspect,
-              },
+              fixedFees: FIXED_FEE_FIELDS.reduce((acc, f) => {
+                acc[f.label] = fixedMap[f.key] ?? 0;
+                return acc;
+              }, {} as Record<string, number>),
             })}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
           </button>
-
-          {/* 초기화 버튼
-              핵심 입력값만 초기화해요 (고정비용은 유지) */}
-          <button
-            onClick={handleReset}
+          <button onClick={handleReset}
             className="px-4 py-2 text-sm font-medium text-gray-600
                        border border-gray-300 rounded-lg hover:bg-gray-50">
             🔄 초기화
           </button>
-
         </div>
       </div>
 
@@ -368,269 +341,244 @@ export default function CostCalc() {
               📥 핵심 입력값
             </h3>
             <div className="space-y-3">
+              {[
+                { label: 'B/L 원료량',  name: 'blQuantity',   unit: '톤',    step: '0.001' },
+                { label: '수입단가',    name: 'importPrice',  unit: 'US$/톤', step: '0.01' },
+                { label: '컨테이너 수', name: 'containers',   unit: 'EA',    step: '1' },
+                { label: '관세율',      name: 'tariffRate',   unit: '%',     step: '0.1' },
+                { label: '운송료',      name: 'transportFee', unit: '원/kg', step: '1' },
+                { label: '마진',        name: 'margin',       unit: '원/kg', step: '1' },
+              ].map(f => (
+                <div key={f.name} className="flex items-center justify-between">
+                  <label className="text-sm text-gray-600 w-40">
+                    {f.label}
+                    <span className="text-xs text-gray-400 ml-1">({f.unit})</span>
+                  </label>
+                  <input type="number" name={f.name}
+                    value={(core as any)[f.name] || ''}
+                    onChange={handleCoreChange} step={f.step}
+                    className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
+                               text-sm text-right focus:outline-none focus:ring-2
+                               focus:ring-blue-500"
+                  />
+                </div>
+              ))}
 
-              {/* B/L 원료량 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  B/L 원료량
-                  <span className="text-xs text-gray-400 ml-1">(톤)</span>
-                </label>
-                <input
-                  type="number" name="blQuantity"
-                  value={core.blQuantity || ''}
-                  onChange={handleCoreChange} step="0.001"
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 수입단가 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  수입단가
-                  <span className="text-xs text-gray-400 ml-1">(US$/톤)</span>
-                </label>
-                <input
-                  type="number" name="importPrice"
-                  value={core.importPrice || ''}
-                  onChange={handleCoreChange} step="0.01"
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 환율 (실시간 자동 불러오기) */}
+              {/* 환율 */}
               <div className="flex items-center justify-between">
                 <label className="text-sm text-gray-600 w-40">
                   환율
                   <span className="text-xs text-gray-400 ml-1">(원/달러)</span>
                 </label>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number" name="exchangeRate"
+                  <input type="number" name="exchangeRate"
                     value={core.exchangeRate || ''}
                     onChange={handleCoreChange} step="0.01"
                     className="w-28 border border-gray-300 rounded-lg px-3 py-1.5
                                text-sm text-right focus:outline-none focus:ring-2
                                focus:ring-blue-500"
                   />
-                  {/* 환율 새로고침 버튼 */}
-                  <button
-                    onClick={fetchExchangeRate}
-                    disabled={rateLoading}
+                  <button onClick={fetchExchangeRate} disabled={rateLoading}
                     title="실시간 환율 불러오기"
-                    className="text-blue-500 hover:text-blue-700 disabled:text-gray-300
-                               transition-colors text-lg"
-                  >
+                    className="text-blue-500 hover:text-blue-700
+                               disabled:text-gray-300 transition-colors text-lg">
                     {rateLoading ? '⏳' : '🔄'}
                   </button>
                 </div>
               </div>
-
-              {/* 환율 업데이트 시간 표시 */}
               {rateUpdatedAt && (
                 <div className="text-xs text-green-600 text-right">
                   ✅ 환율 업데이트: {rateUpdatedAt}
                 </div>
               )}
-
-              {/* 컨테이너 수 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  컨테이너 수
-                  <span className="text-xs text-gray-400 ml-1">(EA)</span>
-                </label>
-                <input
-                  type="number" name="containers"
-                  value={core.containers || ''}
-                  onChange={handleCoreChange} min="0"
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 관세율 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  관세율
-                  <span className="text-xs text-gray-400 ml-1">(%)</span>
-                </label>
-                <input
-                  type="number" name="tariffRate"
-                  value={core.tariffRate || ''}
-                  onChange={handleCoreChange} step="0.1" min="0"
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 운송료 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  운송료
-                  <span className="text-xs text-gray-400 ml-1">(원/kg)</span>
-                </label>
-                <input
-                  type="number" name="transportFee"
-                  value={core.transportFee || ''}
-                  onChange={handleCoreChange} min="0"
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 마진 */}
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-600 w-40">
-                  마진
-                  <span className="text-xs text-gray-400 ml-1">(원/kg)</span>
-                </label>
-                <input
-                  type="number" name="margin"
-                  value={core.margin || ''}
-                  onChange={handleCoreChange}
-                  className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
-                             text-sm text-right focus:outline-none focus:ring-2
-                             focus:ring-blue-500"
-                />
-              </div>
             </div>
           </div>
 
-          {/* 고정 비용 카드 */}
+          {/* ── 고정 비용 카드 ── */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between text-sm
-                         font-bold text-gray-700 uppercase tracking-wider"
-            >
-              <span>⚙️ 고정 비용 설정</span>
+                         font-bold text-gray-700 uppercase tracking-wider">
+              <span>⚙️ 고정 비용</span>
               <span className="text-gray-400">{showAdvanced ? '▲' : '▼'}</span>
             </button>
 
             {showAdvanced && (
               <div className="mt-4">
-
-                {/* 편집 모드 안내 */}
                 {!editingFixed ? (
-                  // 보기 모드
                   <div>
                     <div className="flex justify-between items-center mb-3">
-                      <p className="text-xs text-gray-500">
-                        💾 저장된 고정비용이 계산에 적용돼요
-                      </p>
-                      <button
-                        onClick={() => setEditingFixed(true)}
-                        className="text-xs text-blue-600 hover:text-blue-800
-                                   font-medium border border-blue-200 px-3 py-1
-                                   rounded-lg transition-colors"
-                      >
-                        ✏️ 수정
-                      </button>
+                      <p className="text-xs text-gray-500">💾 서버 저장 (전직원 공유)</p>
+                      {/* 관리자만 수정 버튼 표시 */}
+                      {isAdmin && (
+                        <button onClick={handleFixedEditStart}
+                          className="text-xs text-blue-600 hover:text-blue-800
+                                     font-medium border border-blue-200 px-3 py-1
+                                     rounded-lg transition-colors">
+                          ✏️ 수정
+                        </button>
+                      )}
                     </div>
-
-                    {/* 저장된 고정비용 표시 (읽기 전용) */}
                     <div className="space-y-2">
-                      {[
-                        { label: '전신료', key: 'telegraphFee', unit: '원' },
-                        { label: 'AMEND 수수료', key: 'amendFee', unit: '원' },
-                        { label: 'LG 발급비', key: 'lgFee', unit: '원/건' },
-                        { label: '작업이적비', key: 'relocateFee', unit: '원/회' },
-                        { label: '식검이적비', key: 'foodInspectRelocate', unit: '원/회' },
-                        { label: '식검수수료', key: 'foodInspectFee', unit: '원/회' },
-                        { label: '검정료', key: 'certFee', unit: '원' },
-                        { label: 'D/O FEE', key: 'doFee', unit: '원/건' },
-                        { label: 'WHARFAGE', key: 'wharfage', unit: '원/EA' },
-                        { label: 'C/C', key: 'cc', unit: '원/EA' },
-                        { label: 'T.H.C', key: 'thc', unit: '원/EA' },
-                        { label: '수입신고비', key: 'customsDeclare', unit: '원' },
-                        { label: '분석검정비', key: 'analysisInspect', unit: '원' },
-                      ].map(f => (
+                      {FIXED_FEE_FIELDS.map(f => (
                         <div key={f.key}
                              className="flex justify-between items-center
                                         py-1 border-b border-gray-50">
                           <span className="text-sm text-gray-600">
                             {f.label}
-                            <span className="text-xs text-gray-400 ml-1">
-                              ({f.unit})
-                            </span>
+                            <span className="text-xs text-gray-400 ml-1">({f.unit})</span>
                           </span>
                           <span className="text-sm font-medium text-gray-700">
-                            ₩{(fixed as any)[f.key].toLocaleString()}
+                            ₩{(fixedMap[f.key] ?? 0).toLocaleString()}
                           </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  // 편집 모드
                   <div>
-                    <div className="flex justify-between items-center mb-3">
-                      <p className="text-xs text-orange-600 font-medium">
-                        ✏️ 수정 중 - 저장 버튼을 눌러야 반영돼요
-                      </p>
-                    </div>
-
+                    <p className="text-xs text-orange-600 font-medium mb-3">
+                      ✏️ 수정 중 - 저장 버튼을 눌러야 서버에 반영돼요
+                    </p>
                     <div className="space-y-3">
-                      {[
-                        { label: '전신료', name: 'telegraphFee', unit: '원' },
-                        { label: 'AMEND 수수료', name: 'amendFee', unit: '원' },
-                        { label: 'LG 발급비', name: 'lgFee', unit: '원/건' },
-                        { label: '작업이적비', name: 'relocateFee', unit: '원/회' },
-                        { label: '식검이적비', name: 'foodInspectRelocate', unit: '원/회' },
-                        { label: '식검수수료', name: 'foodInspectFee', unit: '원/회' },
-                        { label: '검정료', name: 'certFee', unit: '원' },
-                        { label: 'D/O FEE', name: 'doFee', unit: '원/건' },
-                        { label: 'WHARFAGE', name: 'wharfage', unit: '원/EA' },
-                        { label: 'C/C', name: 'cc', unit: '원/EA' },
-                        { label: 'T.H.C', name: 'thc', unit: '원/EA' },
-                        { label: '수입신고비', name: 'customsDeclare', unit: '원' },
-                        { label: '분석검정비', name: 'analysisInspect', unit: '원' },
-                      ].map(f => (
-                        <div key={f.name}
-                             className="flex items-center justify-between">
+                      {FIXED_FEE_FIELDS.map(f => (
+                        <div key={f.key} className="flex items-center justify-between">
                           <label className="text-sm text-gray-600 w-40">
                             {f.label}
-                            <span className="text-xs text-gray-400 ml-1">
-                              ({f.unit})
-                            </span>
+                            <span className="text-xs text-gray-400 ml-1">({f.unit})</span>
                           </label>
-                          <input
-                            type="number" name={f.name}
-                            value={(fixedDraft as any)[f.name] || ''}
-                            onChange={handleFixedDraftChange}
+                          <input type="number"
+                            value={fixedDraft[f.key] || ''}
+                            onChange={e => setFixedDraft(prev => ({
+                              ...prev,
+                              [f.key]: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
+                            }))}
                             min="0"
                             className="w-36 border border-orange-300 rounded-lg
                                        px-3 py-1.5 text-sm text-right
-                                       focus:outline-none focus:ring-2
-                                       focus:ring-orange-400"
+                                       focus:outline-none focus:ring-2 focus:ring-orange-400"
                           />
                         </div>
                       ))}
                     </div>
-
-                    {/* 저장/취소 버튼 */}
                     <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={handleFixedCancel}
-                        className="flex-1 px-4 py-2 text-sm font-medium
-                                   text-gray-600 border border-gray-300
-                                   rounded-lg hover:bg-gray-50"
-                      >
+                      <button onClick={() => setEditingFixed(false)}
+                        className="flex-1 px-4 py-2 text-sm font-medium text-gray-600
+                                   border border-gray-300 rounded-lg hover:bg-gray-50">
                         취소
                       </button>
-                      <button
-                        onClick={handleFixedSave}
-                        className="flex-1 px-4 py-2 text-sm font-medium
-                                   text-white bg-blue-600 rounded-lg
-                                   hover:bg-blue-700"
-                      >
-                        💾 저장
+                      <button onClick={handleFixedSave} disabled={saving}
+                        className="flex-1 px-4 py-2 text-sm font-medium text-white
+                                   bg-blue-600 rounded-lg hover:bg-blue-700
+                                   disabled:opacity-50">
+                        {saving ? '저장 중...' : '💾 저장'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── 계산 기준율 카드 (관리자만 수정 가능) ── */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <button
+              onClick={() => setShowRates(!showRates)}
+              className="w-full flex items-center justify-between text-sm
+                         font-bold text-gray-700 uppercase tracking-wider">
+              <span>📐 계산 기준율</span>
+              <span className="text-gray-400">{showRates ? '▲' : '▼'}</span>
+            </button>
+
+            {showRates && (
+              <div className="mt-4">
+                {!editingRates ? (
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <p className="text-xs text-gray-500">💾 서버 저장 (전직원 공유)</p>
+                      {/* 관리자만 수정 버튼 표시 */}
+                      {isAdmin && (
+                        <button onClick={handleRatesEditStart}
+                          className="text-xs text-blue-600 hover:text-blue-800
+                                     font-medium border border-blue-200 px-3 py-1
+                                     rounded-lg transition-colors">
+                          ✏️ 수정
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {rates.map(r => (
+                        <div key={r.key}
+                             className="flex justify-between items-center
+                                        py-1 border-b border-gray-50">
+                          <span className="text-sm text-gray-600">
+                            {r.label}
+                            <span className="text-xs text-gray-400 ml-1">({r.unit})</span>
+                          </span>
+                          <span className="text-sm font-medium text-gray-700">
+                            {r.unit === '원/톤'
+                              ? `₩${r.value.toLocaleString()}`
+                              : r.unit === '일'
+                                ? `${r.value}일`
+                                : r.unit === '배'
+                                  ? `${r.value}배`
+                                  : `${(r.value * 100).toFixed(4)}%`
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {!isAdmin && (
+                      <p className="text-xs text-gray-400 mt-3 text-center">
+                        🔒 관리자만 수정할 수 있어요
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-orange-600 font-medium mb-3">
+                      ✏️ 수정 중 - 저장 버튼을 눌러야 서버에 반영돼요
+                    </p>
+                    <div className="space-y-3">
+                      {rates.map(r => (
+                        <div key={r.key} className="flex items-center justify-between">
+                          <label className="text-sm text-gray-600 w-40">
+                            {r.label}
+                            <span className="text-xs text-gray-400 ml-1">({r.unit})</span>
+                          </label>
+                          <input type="number"
+                            value={ratesDraft[r.key] ?? r.value}
+                            onChange={e => setRatesDraft(prev => ({
+                              ...prev,
+                              [r.key]: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
+                            }))}
+                            step="0.000001"
+                            className="w-36 border border-orange-300 rounded-lg
+                                       px-3 py-1.5 text-sm text-right
+                                       focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg
+                                    px-3 py-2 mt-3">
+                      <p className="text-xs text-yellow-700">
+                        ⚠️ 이율은 소수로 입력해요
+                        <br/>예) 1.2% = 0.012 / 기간은 일수로 입력 (90일 = 90)
+                      </p>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setEditingRates(false)}
+                        className="flex-1 px-4 py-2 text-sm font-medium text-gray-600
+                                   border border-gray-300 rounded-lg hover:bg-gray-50">
+                        취소
+                      </button>
+                      <button onClick={handleRatesSave} disabled={saving}
+                        className="flex-1 px-4 py-2 text-sm font-medium text-white
+                                   bg-blue-600 rounded-lg hover:bg-blue-700
+                                   disabled:opacity-50">
+                        {saving ? '저장 중...' : '💾 저장'}
                       </button>
                     </div>
                   </div>
@@ -682,26 +630,26 @@ export default function CostCalc() {
             </h3>
             <div className="space-y-2">
               {[
-                ['품대', result.goodsPrice, true],
-                ['개설비', result.lcOpenFee, false],
-                ['전신료', fixed.telegraphFee, false],
-                ['AMEND', fixed.amendFee, false],
-                ['보험료', result.insurance, false],
-                ['수입이자', result.importInterest, false],
-                ['TERM CG', result.termCg, false],
-                ['작업비', result.workFee, false],
-                ['작업이적비', result.relocate, false],
-                ['식검이적비', result.foodRelocate, false],
-                ['식검수수료', result.foodInspect, false],
-                ['검정료', fixed.certFee, false],
-                ['D/O FEE', result.doFeeTotal, false],
-                ['WHARFAGE', result.wharfageTotal, false],
-                ['C/C', result.ccTotal, false],
-                ['T.H.C', result.thcTotal, false],
-                ['관세', result.tariff, false],
-                ['통관수수료', result.customsFee, false],
-                ['수입신고비', fixed.customsDeclare, false],
-                ['분석검정비', fixed.analysisInspect, false],
+                ['품대',      result.goodsPrice,         true],
+                ['개설비',    result.lcOpenFee,           false],
+                ['전신료',    fixedMap['전신료'] ?? 0,    false],
+                ['AMEND',     fixedMap['AMEND수수료'] ?? 0, false],
+                ['보험료',    result.insurance,           false],
+                ['수입이자',  result.importInterest,      false],
+                ['TERM CG',   result.termCg,              false],
+                ['작업비',    result.workFee,             false],
+                ['작업이적비', result.relocate,           false],
+                ['식검이적비', result.foodRelocate,       false],
+                ['식검수수료', result.foodInspect,        false],
+                ['검정료',    fixedMap['검정료'] ?? 0,    false],
+                ['D/O FEE',   result.doFeeTotal,          false],
+                ['WHARFAGE',  result.wharfageTotal,       false],
+                ['C/C',       result.ccTotal,             false],
+                ['T.H.C',     result.thcTotal,            false],
+                ['관세',      result.tariff,              false],
+                ['통관수수료', result.customsFee,         false],
+                ['수입신고비', fixedMap['수입신고비'] ?? 0, false],
+                ['분석검정비', fixedMap['분석검정비'] ?? 0, false],
               ].map(([label, value, bold]) => (
                 <div key={label as string}
                      className="flex justify-between items-center
@@ -716,7 +664,6 @@ export default function CostCalc() {
                   </span>
                 </div>
               ))}
-
               <div className="flex justify-between items-center py-2
                               border-t-2 border-gray-200 mt-2">
                 <span className="text-sm font-bold text-gray-700">소계</span>
@@ -725,7 +672,7 @@ export default function CostCalc() {
                 </span>
               </div>
               <div className="flex justify-between items-center py-1.5">
-                <span className="text-sm text-gray-600">감모손실 (0.3%)</span>
+                <span className="text-sm text-gray-600">감모손실</span>
                 <span className="text-sm text-gray-600">
                   ₩{formatKRW(result.loss)}
                 </span>

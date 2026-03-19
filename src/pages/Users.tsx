@@ -4,25 +4,34 @@
 //
 // 🎯 이 파일의 역할:
 //   - 관리자만 접근 가능한 계정 관리 화면이에요
-//   - 직원 계정 추가/삭제/비밀번호 변경 기능
+//   - 직원 계정 추가/수정/삭제/비밀번호 변경 기능
 //   - 마지막 로그인 시간 표시
-//   - 일반직원은 이 페이지 접근 불가
+//
+// 🔄 변경사항:
+//   - 기존: electron-store에 전체 배열 저장
+//   - 변경: 서버 API로 개별 추가/수정/삭제
 //
 // 🔗 연결된 파일들:
-//   - db.ts: loadUsers, saveUsers, generateId
+//   - db.ts: loadUsers, saveUser, updateUser, deleteUser
 //   - App.tsx: currentUser 로 권한 체크
 // ──────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
-import { User, loadUsers, saveUsers, generateId } from '../db';
+import {
+  User,
+  loadUsers,
+  saveUser,
+  updateUser,
+  deleteUser,
+} from '../db';
 
 type Props = {
-  currentUser: User;  // 현재 로그인한 유저
+  currentUser: User;
 };
 
 const EMPTY_FORM = {
   username: '',
-  password: '1234',   // 초기 비밀번호 기본값
+  password: '1234',
   role: '일반직원' as '관리자' | '일반직원',
 };
 
@@ -34,9 +43,9 @@ export default function Users({ currentUser }: Props) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [newPassword, setNewPassword] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // ── 앱 시작 시 유저 목록 불러오기 ──
+  // ── 앱 시작 시 서버에서 유저 목록 불러오기 ──
   useEffect(() => {
     const load = async () => {
       const data = await loadUsers();
@@ -44,12 +53,6 @@ export default function Users({ currentUser }: Props) {
     };
     load();
   }, []);
-
-  // ── 유저 목록 바뀔 때마다 저장 ──
-  useEffect(() => {
-    if (!loaded) { setLoaded(true); return; }
-    saveUsers(users);
-  }, [users]);
 
   // ── 관리자가 아니면 접근 차단 ──
   if (currentUser.role !== '관리자') {
@@ -72,60 +75,79 @@ export default function Users({ currentUser }: Props) {
     setEditingUser(user);
     setFormData({
       username: user.username,
-      password: user.password,
+      password: '',
       role: user.role,
     });
     setShowModal(true);
   };
 
-  const handleDelete = (user: User) => {
+  // ── 계정 삭제 → 서버에 DELETE 요청 ──
+  const handleDelete = async (user: User) => {
     if (user.id === currentUser.id) {
       alert('본인 계정은 삭제할 수 없어요!');
       return;
     }
     if (!window.confirm(`"${user.username}" 계정을 삭제하시겠어요?`)) return;
-    setUsers(prev => prev.filter(u => u.id !== user.id));
-  };
-
-  const handleSave = () => {
-    if (!formData.username.trim()) { alert('아이디를 입력해주세요!'); return; }
-    if (!formData.password.trim()) { alert('비밀번호를 입력해주세요!'); return; }
-
-    // 중복 아이디 체크
-    const duplicate = users.find(
-      u => u.username === formData.username && u.id !== editingUser?.id
-    );
-    if (duplicate) { alert('이미 사용 중인 아이디예요!'); return; }
-
-    if (editingUser) {
-      setUsers(prev =>
-        prev.map(u => u.id === editingUser.id ? { ...u, ...formData } : u)
-      );
-    } else {
-      setUsers(prev => [
-        ...prev,
-        {
-          id: generateId(prev),
-          ...formData,
-          lastLogin: '',
-        }
-      ]);
+    try {
+      await deleteUser(user.id);
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+    } catch (e: any) {
+      alert(e.message || '삭제에 실패했어요.');
     }
-    setShowModal(false);
   };
 
-  const handlePasswordChange = () => {
+  // ── 계정 저장 → 서버에 POST(추가) or PUT(수정) 요청 ──
+  const handleSave = async () => {
+    if (!formData.username.trim()) { alert('아이디를 입력해주세요!'); return; }
+    if (!editingUser && !formData.password.trim()) {
+      alert('비밀번호를 입력해주세요!'); return;
+    }
+    setSaving(true);
+    try {
+      if (editingUser) {
+        // 수정: PUT /api/users/:id
+        const updated = await updateUser(editingUser.id, {
+          username: formData.username,
+          role: formData.role,
+          // 비밀번호 입력 시에만 변경해요
+          ...(formData.password ? { password: formData.password } : {}),
+        });
+        setUsers(prev =>
+          prev.map(u => u.id === editingUser.id ? { ...u, ...updated } : u)
+        );
+      } else {
+        // 추가: POST /api/users
+        const created = await saveUser({
+          username: formData.username,
+          password: formData.password,
+          role: formData.role,
+        });
+        setUsers(prev => [...prev, created]);
+      }
+      setShowModal(false);
+    } catch (e: any) {
+      alert(e.message || '저장에 실패했어요.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── 비밀번호 변경 → 서버에 PUT 요청 ──
+  const handlePasswordChange = async () => {
     if (!newPassword.trim()) { alert('새 비밀번호를 입력해주세요!'); return; }
     if (newPassword.length < 4) { alert('비밀번호는 4자리 이상이어야 해요!'); return; }
     if (!editingUser) return;
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === editingUser.id ? { ...u, password: newPassword } : u
-      )
-    );
-    setShowPwModal(false);
-    setNewPassword('');
-    alert('비밀번호가 변경됐어요!');
+    setSaving(true);
+    try {
+      await updateUser(editingUser.id, { password: newPassword });
+      setShowPwModal(false);
+      setNewPassword('');
+      alert('비밀번호가 변경됐어요!');
+    } catch (e: any) {
+      alert(e.message || '비밀번호 변경에 실패했어요.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -181,23 +203,18 @@ export default function Users({ currentUser }: Props) {
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(user)}
                       className="text-blue-600 hover:text-blue-800 text-xs
-                                 font-medium transition-colors">
-                      수정
-                    </button>
+                                 font-medium transition-colors">수정</button>
                     <button onClick={() => {
                       setEditingUser(user);
                       setNewPassword('');
                       setShowPwModal(true);
                     }}
                       className="text-orange-500 hover:text-orange-700 text-xs
-                                 font-medium transition-colors">
-                      비밀번호
-                    </button>
+                                 font-medium transition-colors">비밀번호</button>
                     <button onClick={() => handleDelete(user)}
+                      disabled={user.id === currentUser.id}
                       className="text-red-500 hover:text-red-700 text-xs
-                                 font-medium transition-colors
-                                 disabled:opacity-30"
-                      disabled={user.id === currentUser.id}>
+                                 font-medium transition-colors disabled:opacity-30">
                       삭제
                     </button>
                   </div>
@@ -229,17 +246,20 @@ export default function Users({ currentUser }: Props) {
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  초기 비밀번호 <span className="text-red-500">*</span>
-                </label>
-                <input type="text"
-                  value={formData.password}
-                  onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2
-                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {/* 추가 시에만 비밀번호 입력 표시 */}
+              {!editingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    초기 비밀번호 <span className="text-red-500">*</span>
+                  </label>
+                  <input type="text"
+                    value={formData.password}
+                    onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   권한
@@ -262,10 +282,11 @@ export default function Users({ currentUser }: Props) {
                            border border-gray-300 rounded-lg hover:bg-gray-50">
                 취소
               </button>
-              <button onClick={handleSave}
+              <button onClick={handleSave} disabled={saving}
                 className="px-4 py-2 text-sm font-medium text-white
-                           bg-blue-600 rounded-lg hover:bg-blue-700">
-                저장
+                           bg-blue-600 rounded-lg hover:bg-blue-700
+                           disabled:opacity-50">
+                {saving ? '저장 중...' : '저장'}
               </button>
             </div>
           </div>
@@ -301,10 +322,11 @@ export default function Users({ currentUser }: Props) {
                            border border-gray-300 rounded-lg hover:bg-gray-50">
                 취소
               </button>
-              <button onClick={handlePasswordChange}
+              <button onClick={handlePasswordChange} disabled={saving}
                 className="px-4 py-2 text-sm font-medium text-white
-                           bg-orange-500 rounded-lg hover:bg-orange-600">
-                변경
+                           bg-orange-500 rounded-lg hover:bg-orange-600
+                           disabled:opacity-50">
+                {saving ? '변경 중...' : '변경'}
               </button>
             </div>
           </div>

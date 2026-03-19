@@ -23,8 +23,9 @@ import React, { useState, useEffect } from 'react';
 import {
   Partner,
   loadPartners,
-  savePartners,
-  generateId,
+  savePartner,
+  updatePartner,
+  deletePartner,
 } from '../db';
 import { exportPartners } from '../excel';
 
@@ -64,17 +65,6 @@ export default function Partners() {
     load();
   }, []);
 
-  // ── 거래처 목록이 바뀔 때마다 자동 저장 ──
-  // partners 상태가 변경될 때마다 electron-store에 저장해요
-  // 단, 첫 로드 시에는 저장하지 않아요 (loaded 플래그로 구분)
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    if (!loaded) {
-      setLoaded(true);
-      return;
-    }
-    savePartners(partners);
-  }, [partners]);
 
   const handleAdd = () => {
     setEditingPartner(null);
@@ -96,30 +86,37 @@ export default function Partners() {
     setShowModal(true);
   };
 
-  const handleDelete = (id: number) => {
+  // ── 거래처 삭제: 서버에 DELETE 요청 후 목록에서 제거 ──
+  const handleDelete = async (id: number) => {
     if (!window.confirm('정말 삭제하시겠어요?')) return;
-    setPartners(prev => prev.filter(p => p.id !== id));
+    try {
+      await deletePartner(id);
+      setPartners(prev => prev.filter(p => p.id !== id));
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
+    }
   };
 
-  const handleSave = () => {
+  // ── 거래처 저장 (추가/수정): 서버에 POST/PUT 요청 ──
+  const handleSave = async () => {
     if (!formData.company.trim()) {
       alert('회사명을 입력해주세요!');
       return;
     }
-    if (editingPartner) {
-      setPartners(prev =>
-        prev.map(p =>
-          p.id === editingPartner.id ? { ...p, ...formData } : p
-        )
-      );
-    } else {
-      const newPartner: Partner = {
-        id: generateId(partners),
-        ...formData,
-      };
-      setPartners(prev => [...prev, newPartner]);
+    try {
+      if (editingPartner) {
+        // 수정: PUT 요청 후 목록 업데이트
+        const updated = await updatePartner(editingPartner.id, formData);
+        setPartners(prev => prev.map(p => p.id === editingPartner.id ? updated : p));
+      } else {
+        // 추가: POST 요청 후 목록에 추가
+        const created = await savePartner(formData);
+        setPartners(prev => [...prev, created]);
+      }
+      setShowModal(false);
+    } catch {
+      alert('서버가 실행 중인지 확인해주세요');
     }
-    setShowModal(false);
   };
 
   const handleChange = (

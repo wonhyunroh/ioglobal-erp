@@ -8,44 +8,41 @@
 //   - 사이드바 메뉴 클릭 시 해당 페이지로 이동해요
 //   - 현재 로그인한 유저 정보를 각 페이지에 전달해요
 //
+// 🔄 변경사항:
+//   - 기존: loadUsers()로 유저 목록 불러와서 프론트에서 로그인 검증
+//   - 변경: loginUser()로 서버에 직접 로그인 요청
+//
 // 🔗 연결된 파일들:
 //   - Login.tsx: 로그인 화면
 //   - Users.tsx: 계정 관리 화면
 //   - Backup.tsx: 백업/복원 화면
-//   - Dashboard.tsx, Partners.tsx, Items.tsx,
-//     Orders.tsx, Inventory.tsx, CostCalc.tsx: 각 메뉴 페이지
-//   - db.ts: loadUsers, updateLastLogin
+//   - db.ts: loginUser (서버 API 호출)
 // ──────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
-import Dashboard  from './pages/Dashboard';
-import Partners   from './pages/Partners';
-import Items      from './pages/Items';
-import Orders     from './pages/Orders';
-import Inventory  from './pages/Inventory';
-import CostCalc   from './pages/CostCalc';
-import Login      from './pages/Login';
-import Users      from './pages/Users';
-import Backup     from './pages/Backup';
-import { User, loadUsers, updateLastLogin } from './db';
+import React, { useState } from 'react';
+import Dashboard from './pages/Dashboard';
+import Partners  from './pages/Partners';
+import Items     from './pages/Items';
+import Orders    from './pages/Orders';
+import Inventory from './pages/Inventory';
+import CostCalc  from './pages/CostCalc';
+import Login     from './pages/Login';
+import Users     from './pages/Users';
+import Backup    from './pages/Backup';
+import { User, loginUser } from './db';
 
 // ──────────────────────────────────────────────
 // 사이드바 메뉴 목록
-//
-// id: 메뉴 식별자 (renderPage 함수에서 사용)
-// label: 화면에 표시되는 메뉴 이름
-// icon: 메뉴 아이콘 (이모지)
-// adminOnly: true 면 관리자만 볼 수 있어요
 // ──────────────────────────────────────────────
 const MENUS = [
-  { id: 'dashboard',  label: '대시보드',    icon: '📊', adminOnly: false },
-  { id: 'partners',   label: '거래처 관리', icon: '🏢', adminOnly: false },
-  { id: 'items',      label: '품목 관리',   icon: '🌽', adminOnly: false },
-  { id: 'orders',     label: '주문 관리',   icon: '📋', adminOnly: false },
-  { id: 'inventory',  label: '재고 관리',   icon: '📦', adminOnly: false },
-  { id: 'costcalc',   label: '수입원가 계산', icon: '💰', adminOnly: false },
-  { id: 'users',      label: '계정 관리',   icon: '👤', adminOnly: true  },
-  { id: 'backup',     label: '백업 / 복원', icon: '🗄️', adminOnly: true  },
+  { id: 'dashboard', label: '대시보드',      icon: '📊', adminOnly: false },
+  { id: 'partners',  label: '거래처 관리',   icon: '🏢', adminOnly: false },
+  { id: 'items',     label: '품목 관리',     icon: '🌽', adminOnly: false },
+  { id: 'orders',    label: '주문 관리',     icon: '📋', adminOnly: false },
+  { id: 'inventory', label: '재고 관리',     icon: '📦', adminOnly: false },
+  { id: 'costcalc',  label: '수입원가 계산', icon: '💰', adminOnly: false },
+  { id: 'users',     label: '계정 관리',     icon: '👤', adminOnly: true  },
+  { id: 'backup',    label: '백업 / 복원',   icon: '🗄️', adminOnly: true  },
 ];
 
 export default function App() {
@@ -53,28 +50,33 @@ export default function App() {
   // ── 현재 로그인한 유저 (null = 로그아웃 상태) ──
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // ── 유저 목록 (로그인 화면에서 사용) ──
-  const [users, setUsers] = useState<User[]>([]);
-
   // ── 현재 선택된 메뉴 ──
   const [activeMenu, setActiveMenu] = useState('dashboard');
 
-  // ── 앱 시작 시 유저 목록 불러오기 ──
-  useEffect(() => {
-    const load = async () => {
-      const data = await loadUsers();
-      setUsers(data);
-    };
-    load();
-  }, []);
+  // ── 로그인 에러 메시지 ──
+  const [loginError, setLoginError] = useState('');
 
-  // ── 로그인 처리 ──
-  const handleLogin = async (user: User) => {
-    // 마지막 로그인 시간 업데이트
-    await updateLastLogin(user.id);
-    const updated = { ...user, lastLogin: new Date().toLocaleString('ko-KR') };
-    setCurrentUser(updated);
-    setActiveMenu('dashboard');
+  // ── 로그인 로딩 상태 ──
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // ──────────────────────────────────────────────
+  // 로그인 처리
+  //
+  // 서버 API에 username/password 보내서 검증해요
+  // 성공 시 유저 정보를 받아서 currentUser에 저장해요
+  // ──────────────────────────────────────────────
+  const handleLogin = async (username: string, password: string) => {
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const user = await loginUser(username, password);
+      setCurrentUser(user);
+      setActiveMenu('dashboard');
+    } catch (e: any) {
+      setLoginError(e.message || '로그인에 실패했어요');
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
   // ── 로그아웃 처리 ──
@@ -91,7 +93,7 @@ export default function App() {
       case 'items':      return <Items />;
       case 'orders':     return <Orders />;
       case 'inventory':  return <Inventory />;
-      case 'costcalc':   return <CostCalc />;
+      case 'costcalc':   return <CostCalc currentUser={currentUser!} />;
       case 'users':      return <Users currentUser={currentUser!} />;
       case 'backup':     return <Backup currentUser={currentUser!} />;
       default:           return <Dashboard />;
@@ -100,7 +102,13 @@ export default function App() {
 
   // ── 로그인 안 된 상태면 로그인 화면 표시 ──
   if (!currentUser) {
-    return <Login users={users} onLogin={handleLogin} />;
+    return (
+      <Login
+        onLogin={handleLogin}
+        error={loginError}
+        loading={loginLoading}
+      />
+    );
   }
 
   // ── 로그인 된 상태면 메인 화면 표시 ──
@@ -124,7 +132,6 @@ export default function App() {
         {/* 메뉴 목록 */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {MENUS.map(menu => {
-            // adminOnly 메뉴는 관리자만 표시해요
             if (menu.adminOnly && currentUser.role !== '관리자') return null;
             return (
               <button
@@ -147,7 +154,6 @@ export default function App() {
         {/* 로그인 유저 정보 + 로그아웃 */}
         <div className="px-4 py-4 border-t border-gray-100">
           <div className="flex items-center gap-2 mb-3">
-            {/* 유저 아바타 (이름 첫 글자) */}
             <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center
                             justify-center text-sm font-bold text-blue-600">
               {currentUser.username.slice(0, 1)}
@@ -159,7 +165,6 @@ export default function App() {
               <p className="text-xs text-gray-400">{currentUser.role}</p>
             </div>
           </div>
-          {/* 로그아웃 버튼 */}
           <button
             onClick={handleLogout}
             className="w-full text-xs text-gray-500 hover:text-red-500

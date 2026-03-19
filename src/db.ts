@@ -4,177 +4,297 @@
 //
 // 🎯 이 파일의 역할:
 //   - 모든 데이터 저장/불러오기를 담당해요
-//   - 마치 엑셀 파일처럼 데이터를 로컬에 저장해요
-//   - electron-store를 통해 앱 껐다 켜도 데이터가 유지돼요
+//   - electron-store 대신 로컬 서버 API를 사용해요
+//   - fetch()로 서버에 HTTP 요청을 보내고 결과를 받아요
 //
-// 📦 저장되는 데이터:
-//   - partners  → 거래처 목록
-//   - items     → 품목 목록
-//   - orders    → 주문 목록
-//   - inventory → 재고 목록
+// 🔗 통신 구조:
+//   각 페이지 → db.ts 함수 호출
+//            → fetch()로 서버에 HTTP 요청
+//            → 서버가 SQLite DB에서 데이터 처리
+//            → 결과를 페이지로 반환
 //
-// 🔗 연결된 파일들:
-//   - preload.ts: window.electronAPI.storeGet/storeSet 제공
-//   - index.ts: 실제 electron-store 처리
-//   - 각 페이지 컴포넌트에서 이 파일의 함수를 불러와 사용해요
-//
-// ⚠️ 수정할 때 주의사항:
-//   - 저장 키 이름은 STORE_KEYS 에서 관리해요
-//   - 새 데이터 타입 추가 시 STORE_KEYS 에 키 추가하고
-//     저장/불러오기 함수도 추가해야 해요
-//   - 데이터 타입 변경 시 기존 저장된 데이터와 호환성 주의!
+// 🌐 서버 주소 설정:
+//   - SERVER_URL 을 서버 PC의 IP로 변경해요
+//   - 개발: http://localhost:3000
+//   - 실제 운영: http://192.168.x.x:3000 (서버 PC IP)
 // ──────────────────────────────────────────────
 
 // ──────────────────────────────────────────────
-// electron-store 저장 키 상수
+// 서버 주소 설정
 //
-// 여기서 키 이름을 한번에 관리해요
-// 오타 방지를 위해 문자열 대신 상수를 사용해요
+// ⚠️ 실제 운영 시 서버 PC의 IP로 변경해주세요!
+// 예) export const SERVER_URL = 'http://192.168.1.100:3000';
 // ──────────────────────────────────────────────
-export const STORE_KEYS = {
-  PARTNERS:  'partners',   // 거래처 목록
-  ITEMS:     'items',      // 품목 목록
-  ORDERS:    'orders',     // 주문 목록
-  INVENTORY: 'inventory',  // 재고 목록
+export const SERVER_URL = 'http://localhost:4000';
+
+// ──────────────────────────────────────────────
+// 공통 fetch 함수
+//
+// 서버에 HTTP 요청을 보내는 공통 함수예요
+// method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+// path: '/api/partners' 같은 API 경로
+// body: POST/PUT 시 보낼 데이터
+// ──────────────────────────────────────────────
+const api = async (
+  method: string,
+  path: string,
+  body?: unknown
+): Promise<any> => {
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `서버 오류 (${res.status})`);
+  }
+  return res.json();
 };
 
 // ──────────────────────────────────────────────
 // 데이터 타입 정의
-//
-// 각 모듈에서 사용하는 데이터 구조예요
-// 타입을 여기서 한번에 관리해서 일관성을 유지해요
 // ──────────────────────────────────────────────
 
 // 거래처
 export type Partner = {
   id: number;
-  company: string;     // 회사명
-  contact: string;     // 담당자
-  phone: string;       // 연락처
-  country: string;     // 국가
+  company: string;
+  contact: string;
+  phone: string;
+  country: string;
   type: '매입처' | '매출처';
-  mainItem: string;    // 주요품목
+  mainItem: string;
   memo: string;
 };
 
 // 품목
 export type Item = {
   id: number;
-  name: string;        // 품목명
-  category: string;    // 카테고리
-  unit: string;        // 단위
-  price: number;       // 기준단가
-  origin: string;      // 원산지
+  name: string;
+  category: string;
+  unit: string;
+  price: number;
+  origin: string;
   memo: string;
 };
 
 // 주문
 export type Order = {
   id: number;
-  orderNo: string;     // 주문번호
-  partner: string;     // 거래처
-  item: string;        // 품목
-  quantity: number;    // 수량
-  price: number;       // 단가
-  total: number;       // 총액
-  orderDate: string;   // 주문일
-  dueDate: string;     // 납기일
+  orderNo: string;
+  partner: string;
+  item: string;
+  quantity: number;
+  price: number;
+  total: number;
+  orderDate: string;
+  dueDate: string;
   type: '매입' | '매출';
-  status: string;      // 주문상태
+  status: string;
   memo: string;
 };
 
 // 재고
 export type InventoryItem = {
   id: number;
-  item: string;        // 품목명
-  category: string;    // 카테고리
-  unit: string;        // 단위
-  current: number;     // 현재재고
-  minStock: number;    // 최소재고
-  lastUpdated: string; // 마지막업데이트
+  item: string;
+  category: string;
+  unit: string;
+  current: number;
+  minStock: number;
+  lastUpdated: string;
+  memo: string;
+};
+
+// 유저
+export type User = {
+  id: number;
+  username: string;
+  password: string;
+  role: '관리자' | '일반직원';
+  lastLogin: string;
+};
+
+// 고정비용
+export type CostFixedFee = {
+  id: number;
+  name: string;
+  amount: number;
   memo: string;
 };
 
 // ──────────────────────────────────────────────
-// 데이터 불러오기 함수
+// 거래처 API 함수
 //
-// electron-store 에서 데이터를 불러와요
-// 저장된 데이터가 없으면 빈 배열을 반환해요
+// ⚠️ 필드명 매핑 주의:
+//   클라이언트 타입  ↔  서버 DB 컬럼
+//   company        ↔  name     (회사명)
+//   mainItem       ↔  address  (주요품목 → address 컬럼에 저장)
 // ──────────────────────────────────────────────
 
-// 거래처 목록 불러오기
+// 서버 응답 row → Partner 타입으로 변환
+const toPartner = (row: any): Partner => ({
+  id:       row.id,
+  company:  row.name,     // DB name → 클라이언트 company
+  contact:  row.contact,
+  phone:    row.phone,
+  country:  row.country,
+  type:     row.type,
+  mainItem: row.address,  // DB address → 클라이언트 mainItem (주요품목)
+  memo:     row.memo,
+});
+
+// Partner 타입 → 서버 요청 body로 변환
+const fromPartner = (p: Omit<Partner, 'id'>) => ({
+  name:    p.company,    // 클라이언트 company → DB name
+  type:    p.type,
+  country: p.country,
+  contact: p.contact,
+  email:   '',
+  phone:   p.phone,
+  address: p.mainItem,   // 클라이언트 mainItem → DB address (주요품목)
+  memo:    p.memo,
+});
+
 export const loadPartners = async (): Promise<Partner[]> => {
   try {
-    const data = await window.electronAPI.storeGet(STORE_KEYS.PARTNERS);
-    return data || [];  // 없으면 빈 배열
-  } catch {
-    return [];
+    const rows = await api('GET', '/api/partners');
+    return rows.map(toPartner);
   }
+  catch { return []; }
 };
 
-// 품목 목록 불러오기
+export const savePartner = async (p: Omit<Partner, 'id'>): Promise<Partner> => {
+  const result = await api('POST', '/api/partners', fromPartner(p));
+  return toPartner(result);
+};
+
+export const updatePartner = async (id: number, p: Omit<Partner, 'id'>): Promise<Partner> => {
+  const result = await api('PUT', `/api/partners/${id}`, fromPartner(p));
+  return toPartner(result);
+};
+
+export const deletePartner = async (id: number): Promise<void> =>
+  api('DELETE', `/api/partners/${id}`);
+
+// 기존 코드 호환용
+export const savePartners = async (_p: Partner[]): Promise<void> => {};
+
+// ──────────────────────────────────────────────
+// 품목 API 함수
+// ──────────────────────────────────────────────
+
 export const loadItems = async (): Promise<Item[]> => {
-  try {
-    const data = await window.electronAPI.storeGet(STORE_KEYS.ITEMS);
-    return data || [];
-  } catch {
-    return [];
-  }
+  try { return await api('GET', '/api/items'); }
+  catch { return []; }
 };
 
-// 주문 목록 불러오기
+export const saveItem = async (i: Omit<Item, 'id'>): Promise<Item> =>
+  api('POST', '/api/items', i);
+
+export const updateItem = async (id: number, i: Omit<Item, 'id'>): Promise<Item> =>
+  api('PUT', `/api/items/${id}`, i);
+
+export const deleteItem = async (id: number): Promise<void> =>
+  api('DELETE', `/api/items/${id}`);
+
+// 기존 코드 호환용
+export const saveItems = async (_i: Item[]): Promise<void> => {};
+
+// ──────────────────────────────────────────────
+// 주문 API 함수
+// ──────────────────────────────────────────────
+
 export const loadOrders = async (): Promise<Order[]> => {
-  try {
-    const data = await window.electronAPI.storeGet(STORE_KEYS.ORDERS);
-    return data || [];
-  } catch {
-    return [];
-  }
+  try { return await api('GET', '/api/orders'); }
+  catch { return []; }
 };
 
-// 재고 목록 불러오기
+export const saveOrder = async (o: Omit<Order, 'id'>): Promise<Order> =>
+  api('POST', '/api/orders', o);
+
+export const updateOrder = async (id: number, o: Omit<Order, 'id'>): Promise<Order> =>
+  api('PUT', `/api/orders/${id}`, o);
+
+export const deleteOrder = async (id: number): Promise<void> =>
+  api('DELETE', `/api/orders/${id}`);
+
+// 기존 코드 호환용
+export const saveOrders = async (_o: Order[]): Promise<void> => {};
+
+// ──────────────────────────────────────────────
+// 재고 API 함수
+// ──────────────────────────────────────────────
+
 export const loadInventory = async (): Promise<InventoryItem[]> => {
-  try {
-    const data = await window.electronAPI.storeGet(STORE_KEYS.INVENTORY);
-    return data || [];
-  } catch {
-    return [];
-  }
+  try { return await api('GET', '/api/inventory'); }
+  catch { return []; }
 };
 
-// ──────────────────────────────────────────────
-// 데이터 저장 함수
-//
-// 전체 배열을 electron-store 에 저장해요
-// 변경이 있을 때마다 전체를 다시 저장해요
-// ──────────────────────────────────────────────
+export const saveInventoryItem = async (i: Omit<InventoryItem, 'id'>): Promise<InventoryItem> =>
+  api('POST', '/api/inventory', i);
 
-// 거래처 목록 저장
-export const savePartners = async (partners: Partner[]): Promise<void> => {
-  await window.electronAPI.storeSet(STORE_KEYS.PARTNERS, partners);
-};
+export const updateInventoryItem = async (id: number, i: Omit<InventoryItem, 'id'>): Promise<InventoryItem> =>
+  api('PUT', `/api/inventory/${id}`, i);
 
-// 품목 목록 저장
-export const saveItems = async (items: Item[]): Promise<void> => {
-  await window.electronAPI.storeSet(STORE_KEYS.ITEMS, items);
-};
+export const deleteInventoryItem = async (id: number): Promise<void> =>
+  api('DELETE', `/api/inventory/${id}`);
 
-// 주문 목록 저장
-export const saveOrders = async (orders: Order[]): Promise<void> => {
-  await window.electronAPI.storeSet(STORE_KEYS.ORDERS, orders);
-};
-
-// 재고 목록 저장
+// 기존 코드 호환용 (Orders.tsx에서 재고 전체 배열 업데이트 시 사용)
 export const saveInventory = async (inventory: InventoryItem[]): Promise<void> => {
-  await window.electronAPI.storeSet(STORE_KEYS.INVENTORY, inventory);
+  await Promise.all(
+    inventory.map(item => api('PUT', `/api/inventory/${item.id}`, item))
+  );
 };
 
 // ──────────────────────────────────────────────
-// 새 ID 생성 함수
-//
-// 현재 목록에서 가장 큰 id + 1을 반환해요
-// 목록이 비어있으면 1부터 시작해요
+// 계정 API 함수
+// ──────────────────────────────────────────────
+
+// 로그인
+export const loginUser = async (username: string, password: string): Promise<User> =>
+  api('POST', '/api/users/login', { username, password });
+
+export const loadUsers = async (): Promise<User[]> => {
+  try { return await api('GET', '/api/users'); }
+  catch { return []; }
+};
+
+export const saveUser = async (u: Omit<User, 'id' | 'lastLogin'>): Promise<User> =>
+  api('POST', '/api/users', u);
+
+export const updateUser = async (id: number, u: Partial<Omit<User, 'id'>>): Promise<User> =>
+  api('PUT', `/api/users/${id}`, u);
+
+export const deleteUser = async (id: number): Promise<void> =>
+  api('DELETE', `/api/users/${id}`);
+
+// 기존 코드 호환용
+export const saveUsers = async (_u: User[]): Promise<void> => {};
+export const updateLastLogin = async (_id: number): Promise<void> => {};
+export const USER_STORE_KEY = 'users';
+
+// ──────────────────────────────────────────────
+// 수입원가 고정비용 API 함수
+// ──────────────────────────────────────────────
+
+export const loadCostFixedFees = async (): Promise<CostFixedFee[]> => {
+  try { return await api('GET', '/api/cost'); }
+  catch { return []; }
+};
+
+export const saveCostFixedFee = async (f: Omit<CostFixedFee, 'id'>): Promise<CostFixedFee> =>
+  api('POST', '/api/cost', f);
+
+export const updateCostFixedFee = async (id: number, f: Omit<CostFixedFee, 'id'>): Promise<CostFixedFee> =>
+  api('PUT', `/api/cost/${id}`, f);
+
+export const deleteCostFixedFee = async (id: number): Promise<void> =>
+  api('DELETE', `/api/cost/${id}`);
+
+// ──────────────────────────────────────────────
+// 기존 코드 호환용
 // ──────────────────────────────────────────────
 export const generateId = (list: { id: number }[]): number => {
   return list.length > 0
@@ -182,55 +302,47 @@ export const generateId = (list: { id: number }[]): number => {
     : 1;
 };
 
+export const STORE_KEYS = {
+  PARTNERS:  'partners',
+  ITEMS:     'items',
+  ORDERS:    'orders',
+  INVENTORY: 'inventory',
+};
 
 // ──────────────────────────────────────────────
-// 👤 유저 관련 타입 및 함수
+// 계산 기준율 API 함수
+//
+// 수입원가 계산에 사용하는 이율/요율을 서버에서 불러와요
+// 관리자가 수정하면 모든 직원에게 적용돼요
 // ──────────────────────────────────────────────
 
-// 유저 타입
-export type User = {
+// 기준율 타입
+export type CalcRate = {
   id: number;
-  username: string;    // 아이디 (직원 이름)
-  password: string;    // 비밀번호
-  role: '관리자' | '일반직원';
-  lastLogin: string;   // 마지막 로그인 시간
+  key: string;
+  value: number;
+  label: string;
+  unit: string;
 };
 
-// 저장 키 추가
-export const USER_STORE_KEY = 'users';
-
-// 기본 관리자 계정
-const DEFAULT_ADMIN: User = {
-  id: 1,
-  username: 'admin',
-  password: '1234',
-  role: '관리자',
-  lastLogin: '',
+// 기준율 목록 불러오기
+export const loadCalcRates = async (): Promise<CalcRate[]> => {
+  try { return await api('GET', '/api/rates'); }
+  catch { return []; }
 };
 
-// 유저 목록 불러오기
-// 저장된 유저가 없으면 기본 관리자 계정 반환
-export const loadUsers = async (): Promise<User[]> => {
-  try {
-    const data = await window.electronAPI.storeGet(USER_STORE_KEY);
-    if (!data || data.length === 0) return [DEFAULT_ADMIN];
-    return data;
-  } catch {
-    return [DEFAULT_ADMIN];
-  }
-};
+// 기준율 수정
+export const updateCalcRate = async (key: string, value: number): Promise<CalcRate> =>
+  api('PUT', `/api/rates/${key}`, { value });
 
-// 유저 목록 저장
-export const saveUsers = async (users: User[]): Promise<void> => {
-  await window.electronAPI.storeSet(USER_STORE_KEY, users);
-};
+// ──────────────────────────────────────────────
+// 백업 / 복원 API 함수
+// ──────────────────────────────────────────────
 
-// 마지막 로그인 시간 업데이트
-export const updateLastLogin = async (userId: number): Promise<void> => {
-  const users = await loadUsers();
-  const now = new Date().toLocaleString('ko-KR');
-  const updated = users.map(u =>
-    u.id === userId ? { ...u, lastLogin: now } : u
-  );
-  await saveUsers(updated);
-};
+// 전체 DB 백업 데이터 불러오기
+export const fetchBackupData = async (): Promise<any> =>
+  api('GET', '/api/backup');
+
+// 전체 DB 복원
+export const restoreBackupData = async (data: any): Promise<void> =>
+  api('POST', '/api/backup/restore', data);
