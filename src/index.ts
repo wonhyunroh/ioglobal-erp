@@ -27,6 +27,7 @@
 
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as fs from 'fs';
+import { startServer } from './server';
 
 import Store from 'electron-store';
 const store = new Store<Record<string, unknown>>();
@@ -77,7 +78,9 @@ const createWindow = (): void => {
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
   // 개발 중에만 개발자 도구 자동으로 열기
-  mainWindow.webContents.openDevTools();
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // ──────────────────────────────────────────────
@@ -164,7 +167,10 @@ ipcMain.handle('open-file', async () => {
 // 앱 이벤트 핸들러
 // ──────────────────────────────────────────────
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  startServer();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

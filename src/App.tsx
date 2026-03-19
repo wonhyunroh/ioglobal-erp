@@ -124,7 +124,7 @@ export default function App() {
             <span className="text-2xl">🌾</span>
             <div>
               <h1 className="text-base font-bold text-gray-800">IO Global</h1>
-              <p className="text-xs text-gray-400">농산물 무역 ERP</p>
+              <p className="text-xs text-gray-400">IO Global ERP</p>
             </div>
           </div>
         </div>

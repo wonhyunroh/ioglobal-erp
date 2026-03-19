@@ -13,7 +13,10 @@ import { rendererConfig } from './webpack.renderer.config';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      // better-sqlite3 네이티브 모듈은 asar 밖에 꺼내야 해요
+      unpack: '**/*.node',
+    },
   },
   rebuildConfig: {},
   makers: [
