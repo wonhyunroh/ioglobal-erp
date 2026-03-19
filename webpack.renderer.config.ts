@@ -14,18 +14,27 @@
 // ──────────────────────────────────────────────
 
 import type { Configuration } from 'webpack';
+import webpack from 'webpack';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
 
+// 빌드 시 SERVER_URL 환경변수를 앱 안에 주입해요
+// - 개발: http://localhost:4000 (기본값)
+// - 배포: GitHub Actions에서 RAILWAY_URL secret을 SERVER_URL로 전달
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+
 export const rendererConfig: Configuration = {
   module: {
-    rules, // webpack.rules.js 에서 정의한 규칙 전체 사용
+    rules,
   },
-  plugins,
+  plugins: [
+    ...plugins,
+    new webpack.DefinePlugin({
+      'process.env.SERVER_URL': JSON.stringify(SERVER_URL),
+    }),
+  ],
   resolve: {
-    // 이 확장자들은 import 시 생략 가능해요
-    // 예: import App from './App' → App.ts, App.tsx 순서로 자동 탐색
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'],
   },
 };

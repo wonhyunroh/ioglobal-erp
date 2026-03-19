@@ -69,7 +69,9 @@ const createWindow = (): void => {
           "connect-src 'self' " +
           "https://open.er-api.com " +
           "http://localhost:4000 " +
-          "http://127.0.0.1:4000"
+          "http://127.0.0.1:4000 " +
+          "https://*.railway.app " +
+          "https://*.up.railway.app"
         ]
       }
     });
@@ -168,7 +170,12 @@ ipcMain.handle('open-file', async () => {
 // ──────────────────────────────────────────────
 
 app.on('ready', () => {
-  startServer();
+  // SERVER_URL이 localhost가 아닌 경우 (클라우드 모드) embedded 서버 스킵
+  const serverUrl = process.env.SERVER_URL || '';
+  const isCloud = serverUrl && !serverUrl.includes('localhost');
+  if (!isCloud) {
+    startServer();
+  }
   createWindow();
 });
 

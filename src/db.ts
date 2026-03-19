@@ -22,10 +22,11 @@
 // ──────────────────────────────────────────────
 // 서버 주소 설정
 //
-// ⚠️ 실제 운영 시 서버 PC의 IP로 변경해주세요!
-// 예) export const SERVER_URL = 'http://192.168.1.100:3000';
+// 빌드 시 webpack DefinePlugin이 SERVER_URL을 자동으로 주입해요
+//   - 개발 모드: http://localhost:4000
+//   - 배포 모드: Railway 서버 URL (GitHub Actions에서 설정)
 // ──────────────────────────────────────────────
-export const SERVER_URL = 'http://localhost:4000';
+export const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
 
 // ──────────────────────────────────────────────
 // 공통 fetch 함수

@@ -24,7 +24,8 @@ import { createRatesRouter }     from './routes/rates';
 import { createBackupRouter }    from './routes/backup';
 
 const app  = express();
-const PORT = 4000;
+// Railway는 PORT 환경변수를 자동으로 설정해요
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4000;
 
 // ── 미들웨어 ──
 app.use(cors());
@@ -33,7 +34,9 @@ app.use(express.json());
 // ──────────────────────────────────────────────
 // 데이터베이스 초기화
 // ──────────────────────────────────────────────
-const dataDir = path.join(__dirname, '..', 'data');
+// DATA_DIR 환경변수 → Railway 볼륨 경로 (/data)
+// 없으면 로컬 server/data 폴더 사용
+const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
