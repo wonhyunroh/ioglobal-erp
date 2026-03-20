@@ -350,3 +350,16 @@ export const fetchBackupData = async (): Promise<any> =>
 // 전체 DB 복원
 export const restoreBackupData = async (data: any): Promise<void> =>
   api('POST', '/api/backup/restore', data);
+
+// ──────────────────────────────────────────────
+// 챗봇 API 함수
+// ──────────────────────────────────────────────
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+export const sendChatMessage = async (messages: ChatMessage[]): Promise<string> => {
+  const result = await api('POST', '/api/chat', { messages });
+  return result.reply;
+};

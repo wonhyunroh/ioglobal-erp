@@ -9,11 +9,12 @@
 // ──────────────────────────────────────────────
 
 // ── import는 항상 맨 위에! ──
-import express  from 'express';
-import cors     from 'cors';
-import Database from 'better-sqlite3';
-import path     from 'path';
-import fs       from 'fs';
+import express    from 'express';
+import cors       from 'cors';
+import Database   from 'better-sqlite3';
+import path       from 'path';
+import fs         from 'fs';
+import Anthropic  from '@anthropic-ai/sdk';
 import { createPartnersRouter }  from './routes/partners';
 import { createItemsRouter }     from './routes/items';
 import { createOrdersRouter }    from './routes/orders';
@@ -212,6 +213,68 @@ app.use('/api/users',     createUsersRouter(db));
 app.use('/api/cost',      createCostRouter(db));
 app.use('/api/rates',     createRatesRouter(db));
 app.use('/api/backup',   createBackupRouter(db));
+
+// ──────────────────────────────────────────────
+// 챗봇 API
+// Claude API를 사용해서 ERP 사용법을 안내해요
+// ──────────────────────────────────────────────
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const CHATBOT_SYSTEM_PROMPT = `당신은 IO Global ERP 시스템의 친절한 도우미입니다.
+부모님(회사 대표님)이 ERP 사용 중 모르는 것을 물어보면 쉽고 친절하게 안내해 주세요.
+
+## IO Global ERP 기능 안내
+
+### 메뉴 구성
+- 📊 대시보드: 주문/재고/매출 현황을 한눈에 볼 수 있어요
+- 🏢 거래처 관리: 매입처/매출처 회사 정보를 관리해요
+- 🌽 품목 관리: 취급하는 상품 목록을 관리해요
+- 📋 주문 관리: 매입/매출 주문을 등록하고 관리해요
+- 📦 재고 관리: 현재 재고 수량을 관리해요
+- 💰 수입원가 계산: 수입 상품의 원가를 계산해요
+- 👤 계정 관리: 직원 계정을 관리해요 (관리자만)
+- 🗄️ 백업/복원: 데이터를 백업하고 복원해요 (관리자만)
+
+### 주문 상태 흐름
+견적 → 계약 → 입고 → 입고완료 → 출고 → 출고완료 → 정산완료
+
+### 예상 매출 vs 출고 매출
+- 예상 매출: 아직 출고되지 않은 매출 주문의 합계 (견적~출고 상태)
+- 출고 매출: 이미 출고 완료된 매출 주문의 합계 (출고완료~정산완료 상태)
+
+### 자주 묻는 질문
+- 주문 추가: 주문 관리 → 우측 상단 "주문 추가" 버튼
+- 거래처 추가: 거래처 관리 → "거래처 추가" 버튼
+- 재고 수정: 재고 관리 → 항목 클릭 후 수정
+- 비밀번호 변경: 계정 관리에서 변경 가능 (관리자만)
+
+항상 한국어로 답변하고, 어르신도 이해하기 쉽게 간단명료하게 설명해 주세요.`;
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: '메시지가 올바르지 않아요' });
+    }
+
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: CHATBOT_SYSTEM_PROMPT,
+      messages: messages,
+    });
+
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    res.json({ reply: text });
+  } catch (e: any) {
+    console.error('[CHAT ERROR]', e.message);
+    res.status(500).json({ error: '챗봇 오류가 발생했어요. 잠시 후 다시 시도해 주세요.' });
+  }
+});
 
 // ── 서버 상태 확인 API ──
 app.get('/api/health', (req, res) => {

@@ -30,6 +30,7 @@ import Login     from './pages/Login';
 import Users     from './pages/Users';
 import Backup    from './pages/Backup';
 import { User, loginUser } from './db';
+import Chatbot from './components/Chatbot';
 
 // ──────────────────────────────────────────────
 // 사이드바 메뉴 목록
@@ -181,6 +182,9 @@ export default function App() {
           {renderPage()}
         </div>
       </main>
+
+      {/* ── ERP 도우미 챗봇 ── */}
+      <Chatbot />
     </div>
   );
 }
