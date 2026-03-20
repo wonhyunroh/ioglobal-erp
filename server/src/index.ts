@@ -288,9 +288,11 @@ app.get('/api/health', (req, res) => {
 
 // ── 웹 앱 정적 파일 서빙 (아이패드/브라우저 접속 지원) ──
 const publicDir = path.join(__dirname, '..', 'public');
+console.log('[WEB] publicDir:', publicDir, '존재:', fs.existsSync(publicDir));
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
-  app.get('*', (req, res) => {
+  // SPA 라우팅: /api 이외의 모든 경로에 index.html 반환 (Express 5 호환)
+  app.use(/^(?!\/api).*/, (req: any, res: any) => {
     res.sendFile(path.join(publicDir, 'index.html'));
   });
 }
