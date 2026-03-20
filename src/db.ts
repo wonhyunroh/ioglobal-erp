@@ -26,7 +26,9 @@
 //   - 개발 모드: http://localhost:4000
 //   - 배포 모드: Railway 서버 URL (GitHub Actions에서 설정)
 // ──────────────────────────────────────────────
-export const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+// ?? 사용: 빈 문자열('')은 그대로 유지 (웹 빌드 = 상대경로)
+// undefined일 때만 localhost로 fallback (로컬 개발용)
+export const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:4000';
 
 // Electron 빌드: webpack DefinePlugin이 실제 API_KEY를 주입
 // 웹 빌드: API_KEY가 빈 문자열 → 로그인 후 localStorage에서 읽음
