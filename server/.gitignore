@@ -1,1 +1,6 @@
 server/dist/
+
+# DB 파일은 Railway Volume에서 관리 (git에서 제외)
+data/ioglobal.db
+data/ioglobal.db-shm
+data/ioglobal.db-wal
