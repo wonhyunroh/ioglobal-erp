@@ -65,18 +65,28 @@ const downloadExcel = async (data: object[], filename: string) => {
     type: 'array',
   });
 
-  // 저장 다이얼로그 띄우기
-  // preload.ts → index.ts → dialog.showSaveDialog 순서로 전달돼요
-  const result = await window.electronAPI.saveFile(
-    `${filename}_${today()}.xlsx`,   // 기본 파일명
-    Array.from(new Uint8Array(excelBuffer)), // 바이트 배열
-  );
+  const fname = `${filename}_${today()}.xlsx`;
 
-  // 저장 성공/실패 알림
-  if (result.success) {
-    alert(`✅ 저장 완료!\n${result.filePath}`);
+  if (typeof window.electronAPI !== 'undefined') {
+    // Electron 환경: 저장 다이얼로그
+    const result = await window.electronAPI.saveFile(
+      fname,
+      Array.from(new Uint8Array(excelBuffer)),
+    );
+    if (result.success) {
+      alert(`✅ 저장 완료!\n${result.filePath}`);
+    }
+  } else {
+    // 웹 환경: 브라우저 다운로드
+    const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('✅ 저장 완료!');
   }
-  // 취소했으면 아무것도 안 해요
 };
 
 // ──────────────────────────────────────────────

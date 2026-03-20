@@ -24,15 +24,22 @@ const webConfig: Configuration = {
   },
   module: {
     rules: [
-      ...rules.filter((r: any) => r?.use?.loader !== 'ts-loader'),
+      // ── TypeScript/React (transpileOnly: Electron 전용 타입과 충돌 방지) ──
       {
         test: /\.tsx?$/,
         exclude: /node_modules/,
         use: {
           loader: 'ts-loader',
-          options: { transpileOnly: true }, // 타입 체크 생략 (웹 빌드 속도 향상)
+          options: { transpileOnly: true },
         },
       },
+      // ── CSS (Tailwind 포함) ──
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader', 'postcss-loader'],
+      },
+      // 참고: node-loader, @vercel/webpack-asset-relocator-loader 는
+      //       Electron 전용이므로 웹 빌드에서 제외
     ]
   },
   plugins: [

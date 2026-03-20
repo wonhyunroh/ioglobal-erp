@@ -90,17 +90,28 @@ export default function Backup({ currentUser }: Props) {
       // 오늘 날짜 (파일명에 사용)
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-      // 저장 다이얼로그 띄우기
-      const result = await window.electronAPI.saveFile(
-        `IOGlobal_ERP_백업_${dateStr}.json`,
-        buffer,
-      );
-
-      if (result.success) {
-        setMessage({
-          type: 'success',
-          text: `✅ 백업 완료!\n저장 위치: ${result.filePath}`,
-        });
+      // Electron 환경: 저장 다이얼로그 / 웹 환경: 브라우저 다운로드
+      if (typeof window.electronAPI !== 'undefined') {
+        const result = await window.electronAPI.saveFile(
+          `IOGlobal_ERP_백업_${dateStr}.json`,
+          buffer,
+        );
+        if (result.success) {
+          setMessage({
+            type: 'success',
+            text: `✅ 백업 완료!\n저장 위치: ${result.filePath}`,
+          });
+        }
+      } else {
+        // 웹 모드: 브라우저 다운로드
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `IOGlobal_ERP_백업_${dateStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage({ type: 'success', text: '✅ 백업 완료! 파일이 다운로드됐어요.' });
       }
     } catch (err) {
       console.error('백업 실패:', err);
@@ -133,19 +144,38 @@ export default function Backup({ currentUser }: Props) {
     setMessage(null);
 
     try {
-      // 파일 열기 다이얼로그 띄우기
-      const result = await window.electronAPI.openFile();
-
-      // 취소했으면 종료
-      if (!result.success || !result.data) {
-        setRestoreLoading(false);
-        return;
+      // Electron 환경: 파일 열기 다이얼로그 / 웹 환경: <input type="file">
+      let jsonText: string;
+      if (typeof window.electronAPI !== 'undefined') {
+        const result = await window.electronAPI.openFile();
+        if (!result.success || !result.data) {
+          setRestoreLoading(false);
+          return;
+        }
+        jsonText = result.data;
+      } else {
+        // 웹 모드: 파일 선택 input 동적 생성
+        jsonText = await new Promise<string>((resolve, reject) => {
+          const input    = document.createElement('input');
+          input.type     = 'file';
+          input.accept   = '.json';
+          input.onchange = (e: any) => {
+            const file   = e.target.files?.[0];
+            if (!file) return reject(new Error('취소'));
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target?.result as string);
+            reader.onerror = () => reject(new Error('파일 읽기 실패'));
+            reader.readAsText(file);
+          };
+          input.click();
+        }).catch(() => { setRestoreLoading(false); return ''; });
+        if (!jsonText) return;
       }
 
       // JSON 파싱
       let backupData: any;
       try {
-        backupData = JSON.parse(result.data);
+        backupData = JSON.parse(jsonText);
       } catch {
         setMessage({ type: 'error', text: '❌ 올바른 JSON 파일이 아니에요!' });
         setRestoreLoading(false);
