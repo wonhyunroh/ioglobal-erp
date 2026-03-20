@@ -10,13 +10,47 @@ permissions:
   contents: write   # Release 생성 권한
 
 jobs:
-  build-windows:
-    name: Windows 빌드
-    runs-on: windows-latest
+  # ── 웹 앱 빌드 (아이패드/브라우저 접속용) ──
+  build-web:
+    name: 웹 앱 빌드
+    runs-on: ubuntu-latest
 
     steps:
       - name: 코드 체크아웃
         uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 패키지 설치
+        run: npm install
+
+      - name: 웹 앱 빌드
+        run: npm run build:web
+
+      - name: 빌드 결과물 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-public
+          path: server/public/
+          retention-days: 1
+
+  build-windows:
+    name: Windows 빌드
+    runs-on: windows-latest
+    needs: build-web
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 웹 앱 다운로드
+        uses: actions/download-artifact@v4
+        with:
+          name: web-public
+          path: server/public/
 
       - name: Node.js 설정
         uses: actions/setup-node@v4

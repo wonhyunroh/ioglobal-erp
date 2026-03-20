@@ -42,8 +42,9 @@ export function createUsersRouter(db: Database.Database) {
         .run(lastLogin, user.id);
 
       // 비밀번호는 빼고 반환해요 (보안)
+      // webToken: 웹 브라우저에서 API 인증에 사용해요
       const { password: _, ...userWithoutPassword } = user;
-      res.json({ ...userWithoutPassword, lastLogin });
+      res.json({ ...userWithoutPassword, lastLogin, webToken: process.env.API_KEY || '' });
     } catch (e) {
       res.status(500).json({ error: '로그인 실패' });
     }

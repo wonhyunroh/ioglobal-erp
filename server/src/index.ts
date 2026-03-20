@@ -38,7 +38,8 @@ app.use(express.json());
 const API_KEY = process.env.API_KEY;
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
-  if (!API_KEY) return next(); // 환경변수 없으면 인증 스킵 (로컬 개발용)
+  if (req.path === '/users/login') return next(); // 로그인은 인증 제외 (웹 접속 지원)
+  if (!API_KEY) return next();
   const key = req.headers['x-api-key'];
   if (key !== API_KEY) {
     return res.status(401).json({ error: '인증 실패: API Key가 올바르지 않아요' });
@@ -284,6 +285,15 @@ app.get('/api/health', (req, res) => {
     time: new Date().toLocaleString('ko-KR'),
   });
 });
+
+// ── 웹 앱 정적 파일 서빙 (아이패드/브라우저 접속 지원) ──
+const publicDir = path.join(__dirname, '..', 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
 
 // ── 서버 시작 ──
 app.listen(PORT, '0.0.0.0', () => {

@@ -71,6 +71,10 @@ export default function App() {
     setLoginError('');
     try {
       const user = await loginUser(username, password);
+      // 웹 모드: 로그인 후 받은 webToken을 localStorage에 저장
+      if ((user as any).webToken) {
+        localStorage.setItem('webToken', (user as any).webToken);
+      }
       setCurrentUser(user);
       setActiveMenu('dashboard');
     } catch (e: any) {
@@ -83,6 +87,7 @@ export default function App() {
   // ── 로그아웃 처리 ──
   const handleLogout = () => {
     if (!window.confirm('로그아웃 하시겠어요?')) return;
+    localStorage.removeItem('webToken');
     setCurrentUser(null);
   };
 

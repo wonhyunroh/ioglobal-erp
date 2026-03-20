@@ -27,7 +27,14 @@
 //   - 배포 모드: Railway 서버 URL (GitHub Actions에서 설정)
 // ──────────────────────────────────────────────
 export const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
-const API_KEY = process.env.API_KEY || '';
+
+// Electron 빌드: webpack DefinePlugin이 실제 API_KEY를 주입
+// 웹 빌드: API_KEY가 빈 문자열 → 로그인 후 localStorage에서 읽음
+const getApiKey = (): string => {
+  const buildTimeKey = process.env.API_KEY;
+  if (buildTimeKey) return buildTimeKey;
+  try { return localStorage.getItem('webToken') || ''; } catch { return ''; }
+};
 
 // ──────────────────────────────────────────────
 // 공통 fetch 함수
@@ -44,7 +51,7 @@ const api = async (
 ): Promise<any> => {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': getApiKey() },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
