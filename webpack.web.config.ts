@@ -44,11 +44,16 @@ const webConfig: Configuration = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.SERVER_URL': JSON.stringify(''),
-      'process.env.API_KEY': JSON.stringify(''),
-      // 브라우저에는 __dirname / __filename 이 없으므로 '/' 로 대체
-      '__dirname':  JSON.stringify('/'),
-      '__filename': JSON.stringify('/index.js'),
+      'process.env.SERVER_URL':  JSON.stringify(''),
+      'process.env.API_KEY':     JSON.stringify(''),
+      'process.env.NODE_ENV':    JSON.stringify('production'),
+      // 브라우저에는 없는 Node.js 전용 전역 변수 대체
+      '__dirname':               JSON.stringify('/'),
+      '__filename':              JSON.stringify('/index.js'),
+      'process.versions':        JSON.stringify({}),
+      'process.platform':        JSON.stringify('browser'),
+      'process.emit':            '(function(){})',
+      'process.version':         JSON.stringify(''),
     }),
     new HtmlWebpackPlugin({
       template: './src/index.html',
