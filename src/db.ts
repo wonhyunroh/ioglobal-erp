@@ -27,6 +27,7 @@
 //   - 배포 모드: Railway 서버 URL (GitHub Actions에서 설정)
 // ──────────────────────────────────────────────
 export const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+const API_KEY = process.env.API_KEY || '';
 
 // ──────────────────────────────────────────────
 // 공통 fetch 함수
@@ -43,7 +44,7 @@ const api = async (
 ): Promise<any> => {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

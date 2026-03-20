@@ -23,6 +23,7 @@ import { plugins } from './webpack.plugins';
 // - 개발: http://localhost:4000 (기본값)
 // - 배포: GitHub Actions에서 RAILWAY_URL secret을 SERVER_URL로 전달
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+const API_KEY = process.env.API_KEY || '';
 
 export const rendererConfig: Configuration = {
   module: {
@@ -32,6 +33,7 @@ export const rendererConfig: Configuration = {
     ...plugins,
     new webpack.DefinePlugin({
       'process.env.SERVER_URL': JSON.stringify(SERVER_URL),
+      'process.env.API_KEY': JSON.stringify(API_KEY),
     }),
   ],
   resolve: {

@@ -31,6 +31,20 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4000;
 app.use(cors());
 app.use(express.json());
 
+// ── API Key 인증 ──
+// API_KEY 환경변수가 설정된 경우에만 인증을 요구해요
+// /api/health 는 Railway 헬스체크용으로 인증 제외
+const API_KEY = process.env.API_KEY;
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!API_KEY) return next(); // 환경변수 없으면 인증 스킵 (로컬 개발용)
+  const key = req.headers['x-api-key'];
+  if (key !== API_KEY) {
+    return res.status(401).json({ error: '인증 실패: API Key가 올바르지 않아요' });
+  }
+  next();
+});
+
 // ── 요청 로깅 (디버깅용) ──
 app.use((req, _res, next) => {
   console.log(`[REQ] ${req.method} ${req.path}`);

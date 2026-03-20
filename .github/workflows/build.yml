@@ -33,6 +33,7 @@ jobs:
           # Railway 서버 URL - GitHub Secrets에서 가져와요
           # Settings → Secrets → RAILWAY_URL 에 Railway URL 입력
           SERVER_URL: ${{ secrets.RAILWAY_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
 
       - name: 빌드 파일 목록 확인
         run: dir out\make /s /b
