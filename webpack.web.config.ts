@@ -44,10 +44,11 @@ const webConfig: Configuration = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      // 웹 빌드: SERVER_URL은 빈 문자열 (같은 서버에서 서빙되므로 상대경로 사용)
       'process.env.SERVER_URL': JSON.stringify(''),
-      // 웹 빌드: API_KEY는 빈 문자열 (로그인 후 localStorage에서 읽음)
       'process.env.API_KEY': JSON.stringify(''),
+      // 브라우저에는 __dirname / __filename 이 없으므로 '/' 로 대체
+      '__dirname':  JSON.stringify('/'),
+      '__filename': JSON.stringify('/index.js'),
     }),
     new HtmlWebpackPlugin({
       template: './src/index.html',
