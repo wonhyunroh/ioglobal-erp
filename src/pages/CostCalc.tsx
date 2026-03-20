@@ -28,6 +28,8 @@ import {
 // 핵심 입력값 타입 (매번 새로 입력)
 // ──────────────────────────────────────────────
 type CoreInput = {
+  contractNo: string;    // 계약번호
+  blNo: string;          // B/L 번호
   blQuantity: number;
   importPrice: number;
   exchangeRate: number;
@@ -58,6 +60,7 @@ const FIXED_FEE_FIELDS = [
 ];
 
 const DEFAULT_CORE: CoreInput = {
+  contractNo: '', blNo: '',
   blQuantity: 0, importPrice: 0, exchangeRate: 0,
   containers: 0, tariffRate: 0, transportFee: 0,
   saleQuantity: 0, margin: 0,
@@ -208,9 +211,11 @@ export default function CostCalc({ currentUser }: Props) {
 
   const handleCoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    // 계약번호, B/L번호는 문자열로 처리
+    const textFields = ['contractNo', 'blNo'];
     setCore(prev => ({
       ...prev,
-      [name]: value === '' ? 0 : parseFloat(value) || 0,
+      [name]: textFields.includes(name) ? value : (value === '' ? 0 : parseFloat(value) || 0),
     }));
   };
 
@@ -341,6 +346,22 @@ export default function CostCalc({ currentUser }: Props) {
               📥 핵심 입력값
             </h3>
             <div className="space-y-3">
+              {/* 계약번호 + B/L번호 (텍스트 입력) */}
+              {[
+                { label: '계약번호', name: 'contractNo', placeholder: '예: CT-2026-001' },
+                { label: 'B/L 번호', name: 'blNo',       placeholder: '예: BL-2026-001' },
+              ].map(f => (
+                <div key={f.name} className="flex items-center justify-between">
+                  <label className="text-sm text-gray-600 w-40">{f.label}</label>
+                  <input type="text" name={f.name}
+                    value={(core as any)[f.name]}
+                    onChange={handleCoreChange}
+                    placeholder={f.placeholder}
+                    className="w-36 border border-gray-300 rounded-lg px-3 py-1.5
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ))}
               {[
                 { label: 'B/L 원료량',  name: 'blQuantity',   unit: '톤',    step: '0.001' },
                 { label: '수입단가',    name: 'importPrice',  unit: 'US$/톤', step: '0.01' },
