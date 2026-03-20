@@ -35,18 +35,19 @@ export function createOrdersRouter(db: Database.Database) {
   router.post('/', (req, res) => {
     try {
       const {
-        orderNo, partner, item, quantity, price,
+        orderNo, contractNo, blNo, partner, item, quantity, price,
         orderDate, dueDate, type, status, memo
       } = req.body;
       // 총액 자동 계산
       const total = (quantity ?? 0) * (price ?? 0);
       const result = db.prepare(`
         INSERT INTO orders
-          (orderNo, partner, item, quantity, price, total,
+          (orderNo, contractNo, blNo, partner, item, quantity, price, total,
            orderDate, dueDate, type, status, memo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        orderNo ?? '', partner, item,
+        orderNo ?? '', contractNo ?? '', blNo ?? '',
+        partner, item,
         quantity ?? 0, price ?? 0, total,
         orderDate ?? '', dueDate ?? '',
         type ?? '매입', status ?? '견적', memo ?? ''
@@ -63,18 +64,20 @@ export function createOrdersRouter(db: Database.Database) {
   router.put('/:id', (req, res) => {
     try {
       const {
-        orderNo, partner, item, quantity, price,
+        orderNo, contractNo, blNo, partner, item, quantity, price,
         orderDate, dueDate, type, status, memo
       } = req.body;
       // 총액 자동 계산
       const total = (quantity ?? 0) * (price ?? 0);
       db.prepare(`
         UPDATE orders
-        SET orderNo=?, partner=?, item=?, quantity=?, price=?, total=?,
+        SET orderNo=?, contractNo=?, blNo=?, partner=?, item=?,
+            quantity=?, price=?, total=?,
             orderDate=?, dueDate=?, type=?, status=?, memo=?
         WHERE id=?
       `).run(
-        orderNo ?? '', partner, item,
+        orderNo ?? '', contractNo ?? '', blNo ?? '',
+        partner, item,
         quantity ?? 0, price ?? 0, total,
         orderDate ?? '', dueDate ?? '',
         type ?? '매입', status ?? '견적', memo ?? '',

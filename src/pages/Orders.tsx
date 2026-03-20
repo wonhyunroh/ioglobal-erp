@@ -1,39 +1,21 @@
 // ──────────────────────────────────────────────
 // 📁 파일명: Orders.tsx
 // 📌 위치: src/pages/Orders.tsx
-//
-// 🎯 이 파일의 역할:
-//   - 주문 관리 화면이에요
-//   - 매입/매출 주문을 등록하고 상태를 관리해요
-//   - 주문 상태 변경 시 재고와 자동 연동돼요:
-//     * 매입 주문 → 입고완료 시 재고 자동 증가
-//     * 매출 주문 → 출고완료 시 재고 자동 차감
-//     * 재고 부족 시 매출 주문 등록 차단
-//   - 데이터는 electron-store에 저장돼서 앱 껐다 켜도 유지돼요
-//
-// 🔗 연결된 파일들:
-//   - db.ts: loadOrders, saveOrders, loadInventory,
-//            saveInventory, generateId
-//   - excel.ts: exportOrders, exportDailyShipments
 // ──────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
 import {
-  Order, InventoryItem,
+  Order, InventoryItem, Partner, Item,
   loadOrders, saveOrder, updateOrder, deleteOrder,
   loadInventory, saveInventory, saveInventoryItem,
+  loadPartners, loadItems,
 } from '../db';
 import { exportOrders, exportDailyShipments } from '../excel';
 
-// ── 주문 상태 목록 ──
-// 매입: 견적 → 계약 → 입고 → 입고완료 → 정산완료
-// 매출: 견적 → 계약 → 출고 → 출고완료 → 정산완료
 const ORDER_STATUSES = [
   '견적', '계약', '입고', '입고완료', '출고', '출고완료', '정산완료'
 ];
 
-// ── 주문 상태별 색상 ──
-// 입고 관련은 파란 계열, 출고 관련은 주황 계열로 구분해요
 const STATUS_COLORS: Record<string, string> = {
   '견적':    'bg-gray-100 text-gray-600',
   '계약':    'bg-blue-100 text-blue-700',
@@ -45,8 +27,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const TABLE_HEADERS = [
-  'No', '주문번호', '거래처', '품목', '수량', '단가', '총액',
-  '주문일', '납기일', '유형', '상태', '관리'
+  'No', '주문번호', '계약번호', 'B/L번호', '거래처', '품목',
+  '수량', '단가', '총액', '주문일', '납기일', '유형', '상태', '관리'
 ];
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -58,7 +40,8 @@ const generateOrderNo = (count: number) => {
 };
 
 const EMPTY_ORDER: Omit<Order, 'id' | 'total'> = {
-  orderNo: '', partner: '', item: '',
+  orderNo: '', contractNo: '', blNo: '',
+  partner: '', item: '',
   quantity: 0, price: 0,
   orderDate: today(), dueDate: '',
   type: '매입', status: '견적', memo: '',
@@ -68,37 +51,27 @@ export default function Orders() {
 
   const [orders, setOrders]       = useState<Order[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [partners, setPartners]   = useState<Partner[]>([]);
+  const [items, setItems]         = useState<Item[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [formData, setFormData]   = useState<Omit<Order, 'id' | 'total'>>(EMPTY_ORDER);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterType, setFilterType]     = useState('전체');
-  // ── 앱 시작 시 주문 + 재고 같이 불러오기 ──
+
   useEffect(() => {
     const load = async () => {
-      const [o, i] = await Promise.all([loadOrders(), loadInventory()]);
+      const [o, i, p, it] = await Promise.all([
+        loadOrders(), loadInventory(), loadPartners(), loadItems()
+      ]);
       setOrders(o);
       setInventory(i);
+      setPartners(p);
+      setItems(it);
     };
     load();
   }, []);
 
-  // ──────────────────────────────────────────────
-  // 재고 연동 함수
-  //
-  // 매입 주문 → 입고완료 시 재고 증가
-  // 매출 주문 → 출고완료 시 재고 감소
-  //
-  // itemName: 주문의 품목명 (재고 품목명과 일치해야 해요)
-  // quantity: 주문 수량
-  // type: 매입(재고증가) or 매출(재고감소)
-  // ──────────────────────────────────────────────
-  // ──────────────────────────────────────────────
-  // 재고 연동 함수
-  //
-  // 매입 입고완료 → 재고 증가 (없으면 자동 생성)
-  // 매출 출고완료 → 재고 차감 (재고 부족 시 차단)
-  // ──────────────────────────────────────────────
   const syncInventory = async (
     itemName: string,
     quantity: number,
@@ -107,91 +80,59 @@ export default function Orders() {
     const targetIndex = inventory.findIndex(i => i.item === itemName);
 
     if (type === '매입') {
-      // ── 매입: 재고에 없으면 자동 생성 ──
       if (targetIndex === -1) {
         const confirmed = window.confirm(
           `📦 재고 자동 등록\n\n` +
           `재고 목록에 "${itemName}" 품목이 없어요.\n` +
-          `입고 수량 ${quantity.toLocaleString()}톤으로 재고를 새로 등록할까요?\n\n` +
-          `(단위·최소재고는 재고 관리에서 수정 가능해요)`
+          `입고 수량 ${quantity.toLocaleString()}으로 재고를 새로 등록할까요?`
         );
         if (!confirmed) return false;
-
-        // 재고 신규 생성 → 서버에 저장
         const newItem = await saveInventoryItem({
-          item:        itemName,
-          category:    '',
-          unit:        '톤',
-          current:     quantity,
-          minStock:    0,
-          lastUpdated: today(),
-          memo:        '주문 입고완료로 자동 등록',
+          item: itemName, category: '', unit: '톤',
+          current: quantity, minStock: 0,
+          lastUpdated: today(), memo: '주문 입고완료로 자동 등록',
         });
         setInventory(prev => [...prev, newItem]);
         return true;
       }
-
-      // ── 매입: 기존 재고에 수량 추가 ──
       const target = inventory[targetIndex];
       const confirmed = window.confirm(
-        `📥 재고 증가 확인\n\n` +
-        `품목: ${itemName}\n` +
+        `📥 재고 증가 확인\n\n품목: ${itemName}\n` +
         `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
         `입고 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
-        `입고 후 재고: ${(target.current + quantity).toLocaleString()} ${target.unit}\n\n` +
-        `재고를 증가할까요?`
+        `입고 후 재고: ${(target.current + quantity).toLocaleString()} ${target.unit}\n\n재고를 증가할까요?`
       );
       if (!confirmed) return false;
-
       const updated = [...inventory];
-      updated[targetIndex] = {
-        ...target,
-        current: target.current + quantity,
-        lastUpdated: today(),
-      };
+      updated[targetIndex] = { ...target, current: target.current + quantity, lastUpdated: today() };
       setInventory(updated);
       await saveInventory(updated);
-
     } else {
-      // ── 매출: 재고에 없으면 차단 ──
       if (targetIndex === -1) {
-        alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.\n재고 관리에서 품목을 먼저 등록해주세요.`);
+        alert(`⚠️ 재고 연동 실패!\n재고 목록에 "${itemName}" 품목이 없어요.`);
         return false;
       }
-
-      // ── 매출: 재고 부족 시 차단 ──
       const target = inventory[targetIndex];
       if (target.current < quantity) {
         alert(
-          `⚠️ 재고 부족!\n` +
-          `품목: ${itemName}\n` +
+          `⚠️ 재고 부족!\n품목: ${itemName}\n` +
           `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
-          `출고 수량: ${quantity.toLocaleString()} ${target.unit}\n\n` +
-          `재고가 부족해서 출고완료로 변경할 수 없어요.`
+          `출고 수량: ${quantity.toLocaleString()} ${target.unit}`
         );
         return false;
       }
-
       const confirmed = window.confirm(
-        `📤 재고 차감 확인\n\n` +
-        `품목: ${itemName}\n` +
+        `📤 재고 차감 확인\n\n품목: ${itemName}\n` +
         `현재 재고: ${target.current.toLocaleString()} ${target.unit}\n` +
         `차감 수량: ${quantity.toLocaleString()} ${target.unit}\n` +
-        `차감 후 재고: ${(target.current - quantity).toLocaleString()} ${target.unit}\n\n` +
-        `재고를 차감할까요?`
+        `차감 후 재고: ${(target.current - quantity).toLocaleString()} ${target.unit}\n\n재고를 차감할까요?`
       );
       if (!confirmed) return false;
-
       const updated = [...inventory];
-      updated[targetIndex] = {
-        ...target,
-        current: target.current - quantity,
-        lastUpdated: today(),
-      };
+      updated[targetIndex] = { ...target, current: target.current - quantity, lastUpdated: today() };
       setInventory(updated);
       await saveInventory(updated);
     }
-
     return true;
   };
 
@@ -204,16 +145,22 @@ export default function Orders() {
   const handleEdit = (order: Order) => {
     setEditingOrder(order);
     setFormData({
-      orderNo: order.orderNo, partner: order.partner,
-      item: order.item, quantity: order.quantity,
-      price: order.price, orderDate: order.orderDate,
-      dueDate: order.dueDate, type: order.type,
-      status: order.status, memo: order.memo,
+      orderNo: order.orderNo,
+      contractNo: order.contractNo || '',
+      blNo: order.blNo || '',
+      partner: order.partner,
+      item: order.item,
+      quantity: order.quantity,
+      price: order.price,
+      orderDate: order.orderDate,
+      dueDate: order.dueDate,
+      type: order.type,
+      status: order.status,
+      memo: order.memo,
     });
     setShowModal(true);
   };
 
-  // ── 주문 삭제: 서버에 DELETE 요청 후 목록에서 제거 ──
   const handleDelete = async (id: number) => {
     if (!window.confirm('정말 삭제하시겠어요?')) return;
     try {
@@ -224,36 +171,24 @@ export default function Orders() {
     }
   };
 
-  // ──────────────────────────────────────────────
-  // 주문 저장 함수
-  //
-  // 매입 주문 → 입고완료 변경 시 재고 증가
-  // 매출 주문 → 출고완료 변경 시 재고 차감
-  // 이미 해당 상태면 재고 연동 안 해요 (중복 방지)
-  // ──────────────────────────────────────────────
   const handleSave = async () => {
     if (!formData.partner.trim()) { alert('거래처를 입력해주세요!'); return; }
     if (!formData.item.trim())    { alert('품목을 입력해주세요!'); return; }
     if (formData.quantity <= 0)   { alert('수량은 0보다 커야 해요!'); return; }
 
-    // ── 매입 주문 → 입고완료 변경 시 재고 증가 ──
     const isBuyingComplete =
       formData.type === '매입' &&
       editingOrder?.status !== '입고완료' &&
       formData.status === '입고완료';
 
-    // ── 매출 주문 → 출고완료 변경 시 재고 차감 ──
     const isSellingComplete =
       formData.type === '매출' &&
       editingOrder?.status !== '출고완료' &&
       formData.status === '출고완료';
 
-    // ── 재고 연동 (신규 주문 + 수정 모두 처리) ──
-    // 입고완료 or 출고완료 상태일 때만 실행해요
     if (isBuyingComplete || isSellingComplete) {
       const success = await syncInventory(
-        formData.item,
-        formData.quantity,
+        formData.item, formData.quantity,
         isBuyingComplete ? '매입' : '매출',
       );
       if (!success) return;
@@ -262,11 +197,9 @@ export default function Orders() {
     const total = formData.quantity * formData.price;
     try {
       if (editingOrder) {
-        // 수정: PUT 요청 후 목록 업데이트
         const updated = await updateOrder(editingOrder.id, { ...formData, total });
         setOrders(prev => prev.map(o => o.id === editingOrder.id ? updated : o));
       } else {
-        // 추가: POST 요청 후 목록에 추가
         const created = await saveOrder({ ...formData, total });
         setOrders(prev => [...prev, created]);
       }
@@ -280,11 +213,33 @@ export default function Orders() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: (name === 'quantity' || name === 'price') ? Number(value) : value,
-    }));
+    if (name === 'item') {
+      const selectedItem = items.find(i => i.name === value);
+      setFormData(prev => ({
+        ...prev,
+        item: value,
+        ...(selectedItem && !editingOrder ? { price: selectedItem.price } : {}),
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: (name === 'quantity' || name === 'price') ? (parseFloat(value) || 0) : value,
+      }));
+    }
   };
+
+  // 거래처 필터 (주문 유형에 따라)
+  const filteredPartners = partners.filter(p =>
+    formData.type === '매입' ? p.type === '매입처' : p.type === '매출처'
+  );
+
+  // 예상 매출 vs 출고 매출
+  const expectedSales = orders
+    .filter(o => o.type === '매출' && !['출고완료', '정산완료'].includes(o.status))
+    .reduce((sum, o) => sum + o.total, 0);
+  const actualSales = orders
+    .filter(o => o.type === '매출' && ['출고완료', '정산완료'].includes(o.status))
+    .reduce((sum, o) => sum + o.total, 0);
 
   const filteredOrders = orders.filter(o => {
     const matchStatus = filterStatus === '전체' || o.status === filterStatus;
@@ -294,33 +249,44 @@ export default function Orders() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">📋 주문 관리</h2>
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
-
         <div className="flex gap-2">
           <button
-            onClick={() =>
-              exportDailyShipments(orders, new Date().toISOString().split('T')[0])
-            }
+            onClick={() => exportDailyShipments(orders, new Date().toISOString().split('T')[0])}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📥 일출고 저장
           </button>
-          <button
-            onClick={() => exportOrders(orders)}
+          <button onClick={() => exportOrders(orders)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
           </button>
-          <button
-            onClick={handleAdd}
+          <button onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm">
             + 주문 추가
           </button>
+        </div>
+      </div>
+
+      {/* ── 매출 요약 ── */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-blue-600 font-medium mb-1">예상 매출 (출고 전)</p>
+          <p className="text-base font-bold text-blue-800">
+            ₩{expectedSales.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-green-600 font-medium mb-1">출고 매출 (출고완료)</p>
+          <p className="text-base font-bold text-green-800">
+            ₩{actualSales.toLocaleString()}
+          </p>
         </div>
       </div>
 
@@ -354,12 +320,12 @@ export default function Orders() {
       </div>
 
       {/* ── 주문 목록 테이블 ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table className="w-full text-xs">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               {TABLE_HEADERS.map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold
+                <th key={h} className="px-3 py-2 text-left text-xs font-semibold
                                        text-gray-600 uppercase tracking-wider whitespace-nowrap">
                   {h}
                 </th>
@@ -379,25 +345,21 @@ export default function Orders() {
             ) : (
               filteredOrders.map((order, index) => (
                 <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-gray-500">{index + 1}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                    {order.orderNo}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{order.partner}</td>
-                  <td className="px-4 py-3 text-gray-600">{order.item}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {order.quantity.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    ₩{order.price.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-800">
+                  <td className="px-3 py-2 text-gray-500">{index + 1}</td>
+                  <td className="px-3 py-2 font-mono text-gray-700">{order.orderNo}</td>
+                  <td className="px-3 py-2 text-gray-600">{order.contractNo || '-'}</td>
+                  <td className="px-3 py-2 text-gray-600">{order.blNo || '-'}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">{order.partner}</td>
+                  <td className="px-3 py-2 text-gray-600">{order.item}</td>
+                  <td className="px-3 py-2 text-gray-600">{order.quantity.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-gray-600">₩{order.price.toLocaleString()}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">
                     ₩{order.total.toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{order.orderDate}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{order.dueDate}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium
+                  <td className="px-3 py-2 text-gray-500">{order.orderDate}</td>
+                  <td className="px-3 py-2 text-gray-500">{order.dueDate}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
                       ${order.type === '매입'
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-green-100 text-green-700'
@@ -405,13 +367,13 @@ export default function Orders() {
                       {order.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
                       ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
                       {order.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">
                     <div className="flex gap-2">
                       <button onClick={() => handleEdit(order)}
                         className="text-blue-600 hover:text-blue-800 text-xs
@@ -433,16 +395,16 @@ export default function Orders() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center
                         justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6
-                          max-h-screen overflow-y-auto">
+                          max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-800 mb-5">
               {editingOrder ? '✏️ 주문 수정' : '➕ 주문 추가'}
             </h3>
             <div className="space-y-4">
+
+              {/* 주문번호 + 유형 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    주문번호
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">주문번호</label>
                   <input type="text" name="orderNo"
                     value={formData.orderNo} onChange={handleChange}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
@@ -450,9 +412,7 @@ export default function Orders() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    주문 유형
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">주문 유형</label>
                   <select name="type" value={formData.type} onChange={handleChange}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -461,44 +421,77 @@ export default function Orders() {
                   </select>
                 </div>
               </div>
+
+              {/* 계약번호 + B/L 번호 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">계약번호</label>
+                  <input type="text" name="contractNo"
+                    value={formData.contractNo} onChange={handleChange}
+                    placeholder="예: CT-2026-001"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">B/L 번호</label>
+                  <input type="text" name="blNo"
+                    value={formData.blNo} onChange={handleChange}
+                    placeholder="예: BL-2026-001"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* 거래처 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   거래처 <span className="text-red-500">*</span>
                 </label>
-                <input type="text" name="partner"
-                  value={formData.partner} onChange={handleChange}
-                  placeholder="예: 카길코리아"
+                <select name="partner" value={formData.partner} onChange={handleChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
-                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- 거래처 선택 --</option>
+                  {filteredPartners.map(p => (
+                    <option key={p.id} value={p.company}>{p.company}</option>
+                  ))}
+                  {/* 기존 데이터 호환: 목록에 없는 거래처도 표시 */}
+                  {formData.partner && !filteredPartners.find(p => p.company === formData.partner) && (
+                    <option value={formData.partner}>{formData.partner}</option>
+                  )}
+                </select>
               </div>
+
+              {/* 품목 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   품목 <span className="text-red-500">*</span>
                   <span className="text-xs text-blue-500 ml-2">
-                    (재고 품목명과 정확히 일치해야 연동돼요)
+                    (선택 시 기준단가 자동입력)
                   </span>
                 </label>
-                <input type="text" name="item"
-                  value={formData.item} onChange={handleChange}
-                  placeholder="예: 옥수수 (미국산)"
-                  list="inventory-items"
+                <select name="item" value={formData.item} onChange={handleChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
-                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <datalist id="inventory-items">
-                  {inventory.map(i => (
-                    <option key={i.id} value={i.item} />
+                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- 품목 선택 --</option>
+                  {items.map(i => (
+                    <option key={i.id} value={i.name}>{i.name}</option>
                   ))}
-                </datalist>
+                  {formData.item && !items.find(i => i.name === formData.item) && (
+                    <option value={formData.item}>{formData.item}</option>
+                  )}
+                </select>
               </div>
+
+              {/* 수량 + 단가 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    수량
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">수량</label>
                   <input type="number" name="quantity"
-                    value={formData.quantity || ''} onChange={handleChange} min="0"
+                    value={formData.quantity || ''} onChange={handleChange}
+                    min="0" step="any"
+                    placeholder="예: 30000.5"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -506,9 +499,11 @@ export default function Orders() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     단가 (원)
+                    <span className="text-xs text-gray-400 ml-1">변동 가능</span>
                   </label>
                   <input type="number" name="price"
-                    value={formData.price || ''} onChange={handleChange} min="0"
+                    value={formData.price || ''} onChange={handleChange}
+                    min="0" step="any"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -517,25 +512,20 @@ export default function Orders() {
 
               {/* 총액 자동 계산 */}
               <div className="bg-blue-50 rounded-lg px-4 py-3">
-                <span className="text-sm text-blue-700 font-medium">
-                  총액 (자동계산):
-                </span>
+                <span className="text-sm text-blue-700 font-medium">총액 (자동계산):</span>
                 <span className="text-lg font-bold text-blue-800 ml-2">
                   ₩{(formData.quantity * formData.price).toLocaleString()}
                 </span>
               </div>
 
-              {/* 재고 현황 실시간 표시 */}
+              {/* 재고 현황 */}
               {formData.item && (() => {
                 const stock = inventory.find(i => i.item === formData.item);
                 if (!stock) return null;
                 const isLow = stock.minStock > 0 && stock.current <= stock.minStock;
                 return (
                   <div className={`rounded-lg px-4 py-3 text-sm
-                    ${isLow
-                      ? 'bg-red-50 border border-red-200'
-                      : 'bg-green-50 border border-green-200'
-                    }`}>
+                    ${isLow ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
                     <span className={isLow ? 'text-red-700' : 'text-green-700'}>
                       {isLow ? '⚠️' : '📦'} 현재 재고:
                       <span className="font-bold ml-1">
@@ -547,11 +537,10 @@ export default function Orders() {
                 );
               })()}
 
+              {/* 주문일 + 납기일 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    주문일
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">주문일</label>
                   <input type="date" name="orderDate"
                     value={formData.orderDate} onChange={handleChange}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
@@ -559,9 +548,7 @@ export default function Orders() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    납기일
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">납기일</label>
                   <input type="date" name="dueDate"
                     value={formData.dueDate} onChange={handleChange}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
@@ -569,28 +556,29 @@ export default function Orders() {
                   />
                 </div>
               </div>
+
+              {/* 주문 상태 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  주문 상태
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">주문 상태</label>
                 <select name="status" value={formData.status} onChange={handleChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+
+              {/* 메모 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  메모
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">메모</label>
                 <textarea name="memo" value={formData.memo} onChange={handleChange}
-                  rows={3}
+                  rows={2}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2
                              focus:ring-blue-500 resize-none"
                 />
               </div>
             </div>
+
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-600

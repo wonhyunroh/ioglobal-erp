@@ -19,9 +19,9 @@ import { exportItems } from '../excel';
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
 ];
-const UNITS = ['톤', 'kg', 'MT'];
+const UNITS = ['톤', 'KG', 'MT'];
 const TABLE_HEADERS = [
-  'No', '품목명', '카테고리', '단위', '기준단가', '원산지', '메모', '관리'
+  'No', '품목명', '카테고리', '단위', '기준단가', '원산지', '상차/하차', '관리'
 ];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
   name: '', category: '옥수수', unit: '톤',
@@ -246,7 +246,7 @@ export default function Items() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  메모
+                  상차/하차
                 </label>
                 <textarea name="memo" value={formData.memo} onChange={handleChange}
                   rows={3}

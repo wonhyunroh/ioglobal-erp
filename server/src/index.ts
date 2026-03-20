@@ -141,10 +141,12 @@ db.exec(`
 `);
 
 // ── items 테이블 컬럼 마이그레이션 ──
-// DB가 이미 존재하는 경우 price, origin 컬럼이 없을 수 있어요
-// ALTER TABLE은 이미 컬럼이 있으면 에러가 나서 try/catch로 처리해요
 try { db.exec(`ALTER TABLE items ADD COLUMN price REAL NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); } catch {}
+
+// ── orders 테이블 컬럼 마이그레이션 ──
+try { db.exec(`ALTER TABLE orders ADD COLUMN contractNo TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN blNo TEXT NOT NULL DEFAULT ''`); } catch {}
 
 // ── 기본 관리자 계정 생성 ──
 const adminExists = db.prepare(

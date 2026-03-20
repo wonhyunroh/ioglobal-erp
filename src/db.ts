@@ -84,6 +84,8 @@ export type Item = {
 export type Order = {
   id: number;
   orderNo: string;
+  contractNo: string;
+  blNo: string;
   partner: string;
   item: string;
   quantity: number;
