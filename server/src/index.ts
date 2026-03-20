@@ -148,17 +148,19 @@ try { db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); }
 try { db.exec(`ALTER TABLE orders ADD COLUMN contractNo TEXT NOT NULL DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE orders ADD COLUMN blNo TEXT NOT NULL DEFAULT ''`); } catch {}
 
-// ── 기본 관리자 계정 생성 ──
-const adminExists = db.prepare(
-  `SELECT id FROM users WHERE username = 'admin'`
-).get();
-
-if (!adminExists) {
-  db.prepare(`
-    INSERT INTO users (username, password, role)
-    VALUES ('admin', '1234', '관리자')
-  `).run();
-  console.log('✅ 기본 관리자 계정 생성: admin / 1234');
+// ── 기본 계정 생성 ──
+const defaultUsers = [
+  { username: 'admin',   password: '1234', role: '관리자' },
+  { username: '노한근',  password: '1234', role: '관리자' },
+  { username: '김지연',  password: '1234', role: '관리자' },
+];
+const insertUser = db.prepare(`
+  INSERT OR IGNORE INTO users (username, password, role)
+  VALUES (?, ?, ?)
+`);
+for (const u of defaultUsers) {
+  const result = insertUser.run(u.username, u.password, u.role);
+  if (result.changes > 0) console.log(`✅ 계정 생성: ${u.username} / ${u.password}`);
 }
 
 // ── 기본 계산 기준율 삽입 ──

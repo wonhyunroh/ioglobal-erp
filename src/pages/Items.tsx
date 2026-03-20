@@ -21,7 +21,7 @@ const CATEGORIES = [
 ];
 const UNITS = ['톤', 'KG', 'MT'];
 const TABLE_HEADERS = [
-  'No', '품목명', '카테고리', '단위', '기준단가', '원산지', '상차/하차', '관리'
+  'No', '품목명', '화주', '단위', '기준단가', '원산지', '상차/하차', '관리'
 ];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
   name: '', category: '옥수수', unit: '톤',
@@ -201,7 +201,7 @@ export default function Items() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    카테고리
+                    화주
                   </label>
                   <select name="category" value={formData.category}
                     onChange={handleChange}
