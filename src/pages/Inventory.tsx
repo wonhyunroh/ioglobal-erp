@@ -32,7 +32,7 @@ const CATEGORIES = [
 ];
 const UNITS = ['톤', 'kg', 'MT'];
 const TABLE_HEADERS = [
-  'No', '품목명', '카테고리', '단위', '현재재고', '최소재고', '상태', '최근업데이트', '관리'
+  'No', '품목명', '화주', '단위', '현재재고', '최소재고', '상태', '최근업데이트', '관리'
 ];
 const today = () => new Date().toISOString().split('T')[0];
 

@@ -15,14 +15,26 @@
 
 import type { Configuration } from 'webpack';
 import webpack from 'webpack';
+import path from 'path';
+import fs from 'fs';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
 
+// .env 파일이 있으면 로드해요 (로컬 개발용)
+const envFile = path.join(__dirname, '.env');
+if (fs.existsSync(envFile)) {
+  const envContent = fs.readFileSync(envFile, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const [key, ...rest] = line.split('=');
+    if (key && rest.length) process.env[key.trim()] = rest.join('=').trim();
+  }
+}
+
 // 빌드 시 SERVER_URL 환경변수를 앱 안에 주입해요
-// - 개발: http://localhost:4000 (기본값)
+// - 개발: .env 파일 또는 Railway URL (기본값)
 // - 배포: GitHub Actions에서 RAILWAY_URL secret을 SERVER_URL로 전달
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4000';
+const SERVER_URL = process.env.SERVER_URL || 'https://ioglobal-erp-production.up.railway.app';
 const API_KEY = process.env.API_KEY || '';
 
 export const rendererConfig: Configuration = {
