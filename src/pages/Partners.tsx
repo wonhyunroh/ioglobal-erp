@@ -27,7 +27,7 @@ import {
   updatePartner,
   deletePartner,
 } from '../db';
-import { exportPartners, parseExcelFile } from '../excel';
+import { exportPartners } from '../excel';
 
 // ──────────────────────────────────────────────
 // 테이블 헤더 목록
@@ -55,6 +55,8 @@ export default function Partners() {
   const [showModal, setShowModal] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [formData, setFormData] = useState<Omit<Partner, 'id'>>(EMPTY_PARTNER);
+  const [searchText, setSearchText] = useState('');
+  const [filterType, setFilterType] = useState('전체');
 
   // ── 앱 시작 시 저장된 거래처 불러오기 ──
   useEffect(() => {
@@ -126,41 +128,16 @@ export default function Partners() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // ── 엑셀 파일에서 거래처 일괄 불러오기 ──
-  // 엑셀 컬럼: 회사명, 담당자, 연락처, 국가, 거래유형, 주요품목, 메모
-  const handleImportExcel = () => {
-    const input    = document.createElement('input');
-    input.type     = 'file';
-    input.accept   = '.xlsx,.xls';
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const rows = await parseExcelFile(file);
-        let count = 0;
-        for (const row of rows) {
-          const company = String(row['회사명'] || row['company'] || '').trim();
-          if (!company) continue;
-          const partner: Omit<Partner, 'id'> = {
-            company,
-            contact:  String(row['담당자'] || row['contact'] || ''),
-            phone:    String(row['연락처'] || row['phone'] || ''),
-            country:  String(row['국가'] || row['country'] || ''),
-            type:     row['거래유형'] === '매출처' ? '매출처' : '매입처',
-            mainItem: String(row['주요품목'] || row['mainItem'] || ''),
-            memo:     String(row['메모'] || row['memo'] || ''),
-          };
-          const created = await savePartner(partner);
-          setPartners(prev => [...prev, created]);
-          count++;
-        }
-        alert(`✅ ${count}개 거래처를 불러왔어요!`);
-      } catch {
-        alert('파일 읽기에 실패했어요. 올바른 엑셀 파일인지 확인해주세요.');
-      }
-    };
-    input.click();
-  };
+  // ── 필터링된 거래처 목록 ──
+  const filteredPartners = partners.filter(p => {
+    const matchType = filterType === '전체' || p.type === filterType;
+    const matchSearch = !searchText ||
+      p.company.toLowerCase().includes(searchText.toLowerCase()) ||
+      p.contact.toLowerCase().includes(searchText.toLowerCase()) ||
+      p.mainItem.toLowerCase().includes(searchText.toLowerCase()) ||
+      p.country.toLowerCase().includes(searchText.toLowerCase());
+    return matchType && matchSearch;
+  });
 
   return (
     <div>
@@ -182,21 +159,43 @@ export default function Partners() {
             📥 엑셀 저장
           </button>
           <button
-            onClick={handleImportExcel}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg
-                       hover:bg-orange-600 transition-colors font-medium text-sm"
-          >
-            📂 엑셀 불러오기
-          </button>
-          <button
             onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm"
           >
             + 거래처 추가
           </button>
+        </div>
       </div>
-     </div> 
+
+      {/* ── 검색 + 필터 ── */}
+      <div className="flex gap-3 mb-4 items-center flex-wrap">
+        <input
+          type="text"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="🔍 회사명, 담당자, 품목, 국가 검색..."
+          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2
+                     text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div className="flex gap-2">
+          {['전체', '매입처', '매출처'].map(type => (
+            <button key={type} onClick={() => setFilterType(type)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors
+                ${filterType === type
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}>
+              {type}
+            </button>
+          ))}
+        </div>
+        {(searchText || filterType !== '전체') && (
+          <span className="text-xs text-gray-500">
+            검색결과: {filteredPartners.length}건
+          </span>
+        )}
+      </div>
 
       {/* ── 거래처 목록 테이블 ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -213,7 +212,7 @@ export default function Partners() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {partners.length === 0 ? (
+            {filteredPartners.length === 0 ? (
               <tr>
                 <td colSpan={TABLE_HEADERS.length}
                     className="text-center py-16 text-gray-400">
@@ -225,7 +224,7 @@ export default function Partners() {
                 </td>
               </tr>
             ) : (
-              partners.map((partner, index) => (
+              filteredPartners.map((partner, index) => (
                 <tr key={partner.id}
                     className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-gray-500">{index + 1}</td>

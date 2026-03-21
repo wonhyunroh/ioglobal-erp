@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Item, loadItems, saveItem, updateItem, deleteItem } from '../db';
-import { exportItems, parseExcelFile } from '../excel';
+import { exportItems } from '../excel';
 
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
@@ -40,7 +40,9 @@ export default function Items() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(EMPTY_ITEM);
-  const [priceUnitIdx, setPriceUnitIdx] = useState(0); // 단가 표시 단위 (0=원, 1=만원, 2=100만원)
+  const [priceUnitIdx, setPriceUnitIdx] = useState(0);
+  const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState('전체');
   // ── 앱 시작 시 저장된 품목 불러오기 ──
   useEffect(() => {
     const load = async () => {
@@ -109,40 +111,15 @@ export default function Items() {
     }));
   };
 
-  // ── 엑셀 파일에서 품목 일괄 불러오기 ──
-  // 엑셀 컬럼: 품목명, 화주(카테고리), 단위, 기준단가, 원산지, 메모
-  const handleImportExcel = () => {
-    const input    = document.createElement('input');
-    input.type     = 'file';
-    input.accept   = '.xlsx,.xls';
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const rows = await parseExcelFile(file);
-        let count = 0;
-        for (const row of rows) {
-          const name = String(row['품목명'] || row['name'] || '').trim();
-          if (!name) continue;
-          const item: Omit<Item, 'id'> = {
-            name,
-            category: String(row['화주'] || row['카테고리'] || row['category'] || '기타'),
-            unit:     String(row['단위'] || row['unit'] || 't'),
-            price:    Number(row['기준단가'] || row['price'] || 0),
-            origin:   String(row['원산지'] || row['origin'] || ''),
-            memo:     String(row['메모'] || row['memo'] || ''),
-          };
-          const created = await saveItem(item);
-          setItems(prev => [...prev, created]);
-          count++;
-        }
-        alert(`✅ ${count}개 품목을 불러왔어요!`);
-      } catch {
-        alert('파일 읽기에 실패했어요. 올바른 엑셀 파일인지 확인해주세요.');
-      }
-    };
-    input.click();
-  };
+  // ── 필터링된 품목 목록 ──
+  const filteredItems = items.filter(item => {
+    const matchCategory = filterCategory === '전체' || item.category === filterCategory;
+    const matchSearch = !searchText ||
+      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.origin.toLowerCase().includes(searchText.toLowerCase());
+    return matchCategory && matchSearch;
+  });
 
   return (
     <div>
@@ -157,17 +134,41 @@ export default function Items() {
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
           </button>
-          <button onClick={handleImportExcel}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg
-                       hover:bg-orange-600 transition-colors font-medium text-sm">
-            📂 엑셀 불러오기
-          </button>
           <button onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm">
             + 품목 추가
           </button>
         </div>
+      </div>
+
+      {/* ── 검색 + 필터 ── */}
+      <div className="flex gap-3 mb-4 items-center flex-wrap">
+        <input
+          type="text"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="🔍 화주, 품목명, 원산지 검색..."
+          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2
+                     text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div className="flex gap-1 flex-wrap">
+          {['전체', ...CATEGORIES].map(cat => (
+            <button key={cat} onClick={() => setFilterCategory(cat)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors
+                ${filterCategory === cat
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}>
+              {cat}
+            </button>
+          ))}
+        </div>
+        {(searchText || filterCategory !== '전체') && (
+          <span className="text-xs text-gray-500">
+            검색결과: {filteredItems.length}건
+          </span>
+        )}
       </div>
 
       
@@ -184,7 +185,7 @@ export default function Items() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <tr>
                 <td colSpan={TABLE_HEADERS.length}
                     className="text-center py-16 text-gray-400">
@@ -194,7 +195,7 @@ export default function Items() {
                 </td>
               </tr>
             ) : (
-              items.map((item, index) => (
+              filteredItems.map((item, index) => (
                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-gray-500">{index + 1}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>

@@ -61,6 +61,7 @@ export default function Orders() {
   const [formData, setFormData]   = useState<Omit<Order, 'id' | 'total'>>(EMPTY_ORDER);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterType, setFilterType]     = useState('전체');
+  const [searchText, setSearchText]     = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -247,7 +248,13 @@ export default function Orders() {
   const filteredOrders = orders.filter(o => {
     const matchStatus = filterStatus === '전체' || o.status === filterStatus;
     const matchType   = filterType === '전체' || o.type === filterType;
-    return matchStatus && matchType;
+    const matchSearch = !searchText ||
+      o.partner.toLowerCase().includes(searchText.toLowerCase()) ||
+      o.item.toLowerCase().includes(searchText.toLowerCase()) ||
+      o.orderNo.toLowerCase().includes(searchText.toLowerCase()) ||
+      (o.contractNo || '').toLowerCase().includes(searchText.toLowerCase()) ||
+      (o.blNo || '').toLowerCase().includes(searchText.toLowerCase());
+    return matchStatus && matchType && matchSearch;
   });
 
   return (
@@ -293,8 +300,20 @@ export default function Orders() {
         </div>
       </div>
 
+      {/* ── 검색 ── */}
+      <div className="mb-3">
+        <input
+          type="text"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="🔍 거래처, 품목, 주문번호, 계약번호, B/L번호 검색..."
+          className="w-full border border-gray-300 rounded-lg px-4 py-2
+                     text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
       {/* ── 필터 영역 ── */}
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
         <div className="flex gap-2">
           {['전체', '매입', '매출'].map(type => (
             <button key={type} onClick={() => setFilterType(type)}
@@ -320,6 +339,11 @@ export default function Orders() {
             </button>
           ))}
         </div>
+        {(searchText || filterType !== '전체' || filterStatus !== '전체') && (
+          <span className="text-xs text-gray-500">
+            검색결과: {filteredOrders.length}건
+          </span>
+        )}
       </div>
 
       {/* ── 주문 목록 테이블 ── */}

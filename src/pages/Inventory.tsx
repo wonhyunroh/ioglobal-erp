@@ -63,6 +63,8 @@ export default function Inventory() {
     type: '입고', quantity: 0, memo: '',
   });
   const [saving, setSaving] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState('전체');
 
   // ── 앱 시작 시 서버에서 재고 목록 불러오기 ──
   useEffect(() => {
@@ -188,9 +190,18 @@ export default function Inventory() {
 
   const lowStockCount = inventory.filter(isLowStock).length;
 
+  // ── 필터링된 재고 목록 ──
+  const filteredInventory = inventory.filter(item => {
+    const matchCategory = filterCategory === '전체' || item.category === filterCategory;
+    const matchSearch = !searchText ||
+      item.item.toLowerCase().includes(searchText.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchText.toLowerCase());
+    return matchCategory && matchSearch;
+  });
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">📦 재고 관리</h2>
           <p className="text-gray-500 text-sm mt-1">
@@ -216,6 +227,35 @@ export default function Inventory() {
         </div>
       </div>
 
+      {/* ── 검색 + 필터 ── */}
+      <div className="flex gap-3 mb-4 items-center flex-wrap">
+        <input
+          type="text"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="🔍 품목명 검색..."
+          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2
+                     text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div className="flex gap-1 flex-wrap">
+          {['전체', ...CATEGORIES].map(cat => (
+            <button key={cat} onClick={() => setFilterCategory(cat)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors
+                ${filterCategory === cat
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}>
+              {cat}
+            </button>
+          ))}
+        </div>
+        {(searchText || filterCategory !== '전체') && (
+          <span className="text-xs text-gray-500">
+            검색결과: {filteredInventory.length}건
+          </span>
+        )}
+      </div>
+
       {/* ── 재고 목록 테이블 ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
@@ -230,7 +270,7 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {inventory.length === 0 ? (
+            {filteredInventory.length === 0 ? (
               <tr>
                 <td colSpan={TABLE_HEADERS.length}
                     className="text-center py-16 text-gray-400">
@@ -240,7 +280,7 @@ export default function Inventory() {
                 </td>
               </tr>
             ) : (
-              inventory.map((item, index) => (
+              filteredInventory.map((item, index) => (
                 <tr key={item.id}
                     className={`hover:bg-gray-50 transition-colors
                       ${isLowStock(item) ? 'bg-red-50' : ''}`}>
