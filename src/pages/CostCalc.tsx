@@ -19,9 +19,10 @@
 import React, { useState, useEffect } from 'react';
 import { exportCostCalc } from '../excel';
 import {
-  CostFixedFee, CalcRate,
+  CostFixedFee, CalcRate, CostCalcRecord,
   loadCostFixedFees, saveCostFixedFee, updateCostFixedFee,
   loadCalcRates, updateCalcRate,
+  loadCostCalcs, saveCostCalc, deleteCostCalc,
 } from '../db';
 
 // ──────────────────────────────────────────────
@@ -102,11 +103,11 @@ function calcResults(
   const importInterest  = goodsPrice * r.IMPORT_INTEREST_RATE * r.IMPORT_INTEREST_DAYS;
   const termCg          = goodsPrice * r.TERM_CG_RATE * r.TERM_CG_DAYS;
   const workFee         = v.blQuantity * r.WORK_FEE_PER_TON;
-  const foodInspectCount = Math.max(1, Math.ceil(v.containers / 12));
   const relocate        = f('작업이적비') * v.containers;
   const foodRelocate    = f('식검이적비') * v.containers;
-  const foodInspect     = f('식검수수료') * foodInspectCount;
-  const doFeeTotal      = f('DO_FEE') * foodInspectCount;
+  // B/L 1건 기준: 식검수수료, DO FEE, LG발급비는 건수 = 1
+  const foodInspect     = f('식검수수료') * 1;
+  const doFeeTotal      = f('DO_FEE') * 1;
   const wharfageTotal   = f('WHARFAGE') * v.containers;
   const ccTotal         = f('CC') * v.containers;
   const thcTotal        = f('THC') * v.containers;
@@ -114,7 +115,7 @@ function calcResults(
                           * r.CUSTOMS_RATE1 * r.CUSTOMS_RATE2;
 
   const subtotal =
-    lcOpenFee + f('전신료') + f('AMEND수수료') + (f('LG발급비') * foodInspectCount) +
+    lcOpenFee + f('전신료') + f('AMEND수수료') + f('LG발급비') +
     insurance + goodsPrice + importInterest + termCg +
     workFee + relocate + foodRelocate + foodInspect +
     f('검정료') + doFeeTotal + wharfageTotal + ccTotal + thcTotal +
@@ -125,7 +126,8 @@ function calcResults(
   const blQuantityKg      = v.blQuantity * 1000;
   const pricePerKgLoad    = blQuantityKg > 0 ? total / blQuantityKg : 0;
   const pricePerKgDelivery = pricePerKgLoad + v.transportFee;
-  const supplyPrice       = Math.ceil((pricePerKgDelivery + v.margin) / 10) * 10;
+  // 공급단가 = 도착도단가 + 마진 (반올림)
+  const supplyPrice       = Math.round(pricePerKgDelivery + v.margin);
 
   return {
     goodsPrice, tariff, lcOpenFee, insurance, importInterest, termCg,
@@ -159,19 +161,26 @@ export default function CostCalc({ currentUser }: Props) {
   const [rateLoading, setRateLoading]   = useState(false);
   const [rateUpdatedAt, setRateUpdatedAt] = useState('');
   const [saving, setSaving] = useState(false);
+  // ── 저장/불러오기 ──
+  const [savedCalcs, setSavedCalcs]   = useState<CostCalcRecord[]>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [saveName, setSaveName]           = useState('');
 
   // 관리자 여부 확인
   const isAdmin = currentUser?.role === '관리자';
 
-  // ── 앱 시작 시 서버에서 고정비용 + 기준율 불러오기 ──
+  // ── 앱 시작 시 서버에서 고정비용 + 기준율 + 저장된 계산 불러오기 ──
   useEffect(() => {
     const load = async () => {
-      const [fees, rateList] = await Promise.all([
+      const [fees, rateList, calcs] = await Promise.all([
         loadCostFixedFees(),
         loadCalcRates(),
+        loadCostCalcs(),
       ]);
       setFixedFees(fees);
       setRates(rateList);
+      setSavedCalcs(calcs);
     };
     load();
     fetchExchangeRate();
@@ -292,6 +301,35 @@ export default function CostCalc({ currentUser }: Props) {
     }
   };
 
+  // ── 계산 저장 ──
+  const handleSaveCalc = async () => {
+    const name = saveName.trim() || core.blNo || core.contractNo;
+    if (!name) { alert('저장 이름을 입력해주세요!'); return; }
+    try {
+      const newCalc = await saveCostCalc({ name, data: core as any });
+      setSavedCalcs(prev => [newCalc, ...prev]);
+      setShowSaveModal(false);
+      setSaveName('');
+      alert(`✅ "${name}" 저장 완료!`);
+    } catch {
+      alert('저장에 실패했어요.');
+    }
+  };
+
+  // ── 계산 불러오기 ──
+  const handleLoadCalc = (calc: CostCalcRecord) => {
+    setCore(calc.data as CoreInput);
+    setShowLoadModal(false);
+    alert(`✅ "${calc.name}" 불러오기 완료!`);
+  };
+
+  // ── 저장된 계산 삭제 ──
+  const handleDeleteCalc = async (id: number, name: string) => {
+    if (!window.confirm(`"${name}"을 삭제할까요?`)) return;
+    await deleteCostCalc(id);
+    setSavedCalcs(prev => prev.filter(c => c.id !== id));
+  };
+
   const result = calcResults(core, fixedMap, ratesMap);
 
   return (
@@ -306,6 +344,8 @@ export default function CostCalc({ currentUser }: Props) {
         <div className="flex gap-2">
           <button
             onClick={() => exportCostCalc({
+              contractNo: core.contractNo,
+              blNo: core.blNo,
               blAmount: core.blQuantity,
               importPrice: core.importPrice,
               exchangeRate: core.exchangeRate,
@@ -315,6 +355,22 @@ export default function CostCalc({ currentUser }: Props) {
               salesQty: core.saleQuantity,
               margin: core.margin,
               goodsCost: result.goodsPrice,
+              lcOpenFee: result.lcOpenFee,
+              insurance: result.insurance,
+              importInterest: result.importInterest,
+              termCg: result.termCg,
+              workFee: result.workFee,
+              relocate: result.relocate,
+              foodRelocate: result.foodRelocate,
+              foodInspect: result.foodInspect,
+              doFeeTotal: result.doFeeTotal,
+              wharfageTotal: result.wharfageTotal,
+              ccTotal: result.ccTotal,
+              thcTotal: result.thcTotal,
+              customsFee: result.customsFee,
+              subtotal: result.subtotal,
+              loss: result.loss,
+              total: result.total,
               loadingPrice: result.pricePerKgLoad,
               arrivalPrice: result.pricePerKgDelivery,
               supplyPrice: result.supplyPrice,
@@ -326,6 +382,16 @@ export default function CostCalc({ currentUser }: Props) {
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
+          </button>
+          <button onClick={() => { setSaveName(core.blNo || core.contractNo || ''); setShowSaveModal(true); }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg
+                       hover:bg-blue-700 transition-colors font-medium text-sm">
+            💾 계산 저장
+          </button>
+          <button onClick={() => setShowLoadModal(true)}
+            className="px-4 py-2 text-sm font-medium text-gray-600
+                       border border-gray-300 rounded-lg hover:bg-gray-50">
+            📂 불러오기 {savedCalcs.length > 0 && `(${savedCalcs.length})`}
           </button>
           <button onClick={handleReset}
             className="px-4 py-2 text-sm font-medium text-gray-600
@@ -709,6 +775,92 @@ export default function CostCalc({ currentUser }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── 계산 저장 모달 ── */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center
+                        justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">💾 계산 저장</h3>
+            <p className="text-sm text-gray-500 mb-3">
+              이 계산을 나중에 불러올 수 있도록 이름을 지정해 저장해요
+            </p>
+            <input
+              type="text"
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSaveCalc()}
+              placeholder="예: 카길퓨리나 26.04, BL-2026-001"
+              autoFocus
+              className="w-full border border-gray-300 rounded-lg px-3 py-2
+                         text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+            />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600
+                           border border-gray-300 rounded-lg hover:bg-gray-50">
+                취소
+              </button>
+              <button onClick={handleSaveCalc}
+                className="px-4 py-2 text-sm font-medium text-white
+                           bg-blue-600 rounded-lg hover:bg-blue-700">
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 계산 불러오기 모달 ── */}
+      {showLoadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center
+                        justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">📂 저장된 계산 불러오기</h3>
+            {savedCalcs.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">
+                저장된 계산이 없어요
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {savedCalcs.map(calc => (
+                  <div key={calc.id}
+                       className="flex items-center justify-between p-3
+                                  border border-gray-200 rounded-lg hover:bg-gray-50">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{calc.name}</p>
+                      <p className="text-xs text-gray-400">{calc.created_at}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleLoadCalc(calc)}
+                        className="text-xs text-blue-600 hover:text-blue-800
+                                   font-medium border border-blue-200 px-2 py-1
+                                   rounded-lg transition-colors">
+                        불러오기
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCalc(calc.id, calc.name)}
+                        className="text-xs text-red-500 hover:text-red-700
+                                   font-medium border border-red-200 px-2 py-1
+                                   rounded-lg transition-colors">
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowLoadModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600
+                           border border-gray-300 rounded-lg hover:bg-gray-50">
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

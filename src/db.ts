@@ -349,6 +349,30 @@ export const updateCalcRate = async (key: string, value: number): Promise<CalcRa
   api('PUT', `/api/rates/${key}`, { value });
 
 // ──────────────────────────────────────────────
+// 저장된 수입원가 계산 API 함수
+// ──────────────────────────────────────────────
+
+export type CostCalcRecord = {
+  id: number;
+  name: string;
+  data: Record<string, any>;
+  created_at: string;
+};
+
+export const loadCostCalcs = async (): Promise<CostCalcRecord[]> => {
+  try { return await api('GET', '/api/cost-calc'); }
+  catch { return []; }
+};
+
+export const saveCostCalc = async (
+  record: { name: string; data: Record<string, any> }
+): Promise<CostCalcRecord> =>
+  api('POST', '/api/cost-calc', record);
+
+export const deleteCostCalc = async (id: number): Promise<void> =>
+  api('DELETE', `/api/cost-calc/${id}`);
+
+// ──────────────────────────────────────────────
 // 백업 / 복원 API 함수
 // ──────────────────────────────────────────────
 

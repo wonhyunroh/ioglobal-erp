@@ -27,7 +27,7 @@ import {
   updatePartner,
   deletePartner,
 } from '../db';
-import { exportPartners } from '../excel';
+import { exportPartners, parseExcelFile } from '../excel';
 
 // ──────────────────────────────────────────────
 // 테이블 헤더 목록
@@ -126,6 +126,42 @@ export default function Partners() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // ── 엑셀 파일에서 거래처 일괄 불러오기 ──
+  // 엑셀 컬럼: 회사명, 담당자, 연락처, 국가, 거래유형, 주요품목, 메모
+  const handleImportExcel = () => {
+    const input    = document.createElement('input');
+    input.type     = 'file';
+    input.accept   = '.xlsx,.xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const rows = await parseExcelFile(file);
+        let count = 0;
+        for (const row of rows) {
+          const company = String(row['회사명'] || row['company'] || '').trim();
+          if (!company) continue;
+          const partner: Omit<Partner, 'id'> = {
+            company,
+            contact:  String(row['담당자'] || row['contact'] || ''),
+            phone:    String(row['연락처'] || row['phone'] || ''),
+            country:  String(row['국가'] || row['country'] || ''),
+            type:     row['거래유형'] === '매출처' ? '매출처' : '매입처',
+            mainItem: String(row['주요품목'] || row['mainItem'] || ''),
+            memo:     String(row['메모'] || row['memo'] || ''),
+          };
+          const created = await savePartner(partner);
+          setPartners(prev => [...prev, created]);
+          count++;
+        }
+        alert(`✅ ${count}개 거래처를 불러왔어요!`);
+      } catch {
+        alert('파일 읽기에 실패했어요. 올바른 엑셀 파일인지 확인해주세요.');
+      }
+    };
+    input.click();
+  };
+
   return (
     <div>
       {/* ── 페이지 제목 + 추가 버튼 ── */}
@@ -144,6 +180,13 @@ export default function Partners() {
                        hover:bg-green-700 transition-colors font-medium text-sm"
           >
             📥 엑셀 저장
+          </button>
+          <button
+            onClick={handleImportExcel}
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-orange-600 transition-colors font-medium text-sm"
+          >
+            📂 엑셀 불러오기
           </button>
           <button
             onClick={handleAdd}

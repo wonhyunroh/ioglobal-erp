@@ -23,6 +23,7 @@ import { createUsersRouter }     from './routes/users';
 import { createCostRouter }      from './routes/cost';
 import { createRatesRouter }     from './routes/rates';
 import { createBackupRouter }    from './routes/backup';
+import { createCostCalcRouter }  from './routes/cost-calc';
 
 const app  = express();
 // Railway는 PORT 환경변수를 자동으로 설정해요
@@ -154,6 +155,14 @@ db.exec(`
     unit  TEXT    NOT NULL DEFAULT ''
   );
 
+  -- ── 저장된 수입원가 계산 테이블 ──
+  CREATE TABLE IF NOT EXISTS cost_calculations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL,
+    data       TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+  );
+
 `);
 
 // ── items 테이블 컬럼 마이그레이션 ──
@@ -213,7 +222,8 @@ app.use('/api/inventory', createInventoryRouter(db));
 app.use('/api/users',     createUsersRouter(db));
 app.use('/api/cost',      createCostRouter(db));
 app.use('/api/rates',     createRatesRouter(db));
-app.use('/api/backup',   createBackupRouter(db));
+app.use('/api/backup',     createBackupRouter(db));
+app.use('/api/cost-calc', createCostCalcRouter(db));
 
 // ──────────────────────────────────────────────
 // 챗봇 API

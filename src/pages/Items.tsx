@@ -14,14 +14,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { Item, loadItems, saveItem, updateItem, deleteItem } from '../db';
-import { exportItems } from '../excel';
+import { exportItems, parseExcelFile } from '../excel';
 
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
 ];
 const UNITS = ['톤', 'KG', 'MT'];
 const TABLE_HEADERS = [
-  'No', '품목명', '화주', '단위', '기준단가', '원산지', '상차/하차', '관리'
+  'No', '품목명', '화주', '단위', '기준단가', '원산지', '메모', '관리'
+];
+// 단가 단위 옵션 (표시용, 실제 저장은 항상 원 단위)
+const PRICE_UNITS = [
+  { label: '원',      multiplier: 1 },
+  { label: '만원',    multiplier: 10000 },
+  { label: '100만원', multiplier: 1000000 },
 ];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
   name: '', category: '옥수수', unit: '톤',
@@ -34,6 +40,7 @@ export default function Items() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(EMPTY_ITEM);
+  const [priceUnitIdx, setPriceUnitIdx] = useState(0); // 단가 표시 단위 (0=원, 1=만원, 2=100만원)
   // ── 앱 시작 시 저장된 품목 불러오기 ──
   useEffect(() => {
     const load = async () => {
@@ -96,8 +103,45 @@ export default function Items() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'price' ? Number(value) : value,
+      [name]: name === 'price'
+        ? (Number(value) * PRICE_UNITS[priceUnitIdx].multiplier)  // 표시값 → 실제 원 단위로 변환
+        : value,
     }));
+  };
+
+  // ── 엑셀 파일에서 품목 일괄 불러오기 ──
+  // 엑셀 컬럼: 품목명, 화주(카테고리), 단위, 기준단가, 원산지, 메모
+  const handleImportExcel = () => {
+    const input    = document.createElement('input');
+    input.type     = 'file';
+    input.accept   = '.xlsx,.xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const rows = await parseExcelFile(file);
+        let count = 0;
+        for (const row of rows) {
+          const name = String(row['품목명'] || row['name'] || '').trim();
+          if (!name) continue;
+          const item: Omit<Item, 'id'> = {
+            name,
+            category: String(row['화주'] || row['카테고리'] || row['category'] || '기타'),
+            unit:     String(row['단위'] || row['unit'] || '톤'),
+            price:    Number(row['기준단가'] || row['price'] || 0),
+            origin:   String(row['원산지'] || row['origin'] || ''),
+            memo:     String(row['메모'] || row['memo'] || ''),
+          };
+          const created = await saveItem(item);
+          setItems(prev => [...prev, created]);
+          count++;
+        }
+        alert(`✅ ${count}개 품목을 불러왔어요!`);
+      } catch {
+        alert('파일 읽기에 실패했어요. 올바른 엑셀 파일인지 확인해주세요.');
+      }
+    };
+    input.click();
   };
 
   return (
@@ -112,6 +156,11 @@ export default function Items() {
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
             📥 엑셀 저장
+          </button>
+          <button onClick={handleImportExcel}
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-orange-600 transition-colors font-medium text-sm">
+            📂 엑셀 불러오기
           </button>
           <button onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
@@ -224,13 +273,32 @@ export default function Items() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    기준 단가 (원)
+                    기준 단가
                   </label>
-                  <input type="number" name="price"
-                    value={formData.price || ''} onChange={handleChange} min="0"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2
-                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex gap-1">
+                    <input type="number" name="price"
+                      value={formData.price
+                        ? formData.price / PRICE_UNITS[priceUnitIdx].multiplier
+                        : ''}
+                      onChange={handleChange} min="0" step="0.1"
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2
+                                 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <select
+                      value={priceUnitIdx}
+                      onChange={e => setPriceUnitIdx(Number(e.target.value))}
+                      className="border border-gray-300 rounded-lg px-2 py-2 text-sm
+                                 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                      {PRICE_UNITS.map((u, i) => (
+                        <option key={u.label} value={i}>{u.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {formData.price > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      실제 저장값: ₩{formData.price.toLocaleString()}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
