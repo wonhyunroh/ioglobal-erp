@@ -63,6 +63,8 @@ export default function Orders() {
   const [filterType, setFilterType]     = useState('전체');
   const [searchText, setSearchText]     = useState('');
   const [filterMonth, setFilterMonth]   = useState('');
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [loadSearchText, setLoadSearchText] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -141,8 +143,8 @@ export default function Orders() {
     return true;
   };
 
-  // ── 서버에서 데이터 다시 불러오기 ──
-  const handleReload = async () => {
+  // ── 불러오기: 저장된 주문 검색 후 선택 → 수정 폼 ──
+  const handleOpenLoad = async () => {
     const [o, i, p, it] = await Promise.all([
       loadOrders(), loadInventory(), loadPartners(), loadItems()
     ]);
@@ -150,8 +152,24 @@ export default function Orders() {
     setInventory(i);
     setPartners(p);
     setItems(it);
-    alert(`${o.length}개 주문 데이터를 불러왔어요!`);
+    setLoadSearchText('');
+    setShowLoadModal(true);
   };
+
+  const handleLoadSelect = (order: Order) => {
+    setShowLoadModal(false);
+    handleEdit(order);
+  };
+
+  const loadFiltered = orders.filter(o => {
+    if (!loadSearchText) return true;
+    const q = loadSearchText.toLowerCase();
+    return o.partner.toLowerCase().includes(q) ||
+      o.item.toLowerCase().includes(q) ||
+      o.orderNo.toLowerCase().includes(q) ||
+      (o.contractNo || '').toLowerCase().includes(q) ||
+      (o.blNo || '').toLowerCase().includes(q);
+  });
 
   const handleAdd = () => {
     setEditingOrder(null);
@@ -300,7 +318,7 @@ export default function Orders() {
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleReload}
+          <button onClick={handleOpenLoad}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📂 불러오기
@@ -697,6 +715,76 @@ export default function Orders() {
                 className="px-4 py-2 text-sm font-medium text-white
                            bg-blue-600 rounded-lg hover:bg-blue-700">
                 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 불러오기 모달: 저장된 주문 검색 ── */}
+      {showLoadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 p-6 max-h-[80vh] flex flex-col">
+            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 저장된 주문 불러오기</h3>
+            <p className="text-xs text-gray-500 mb-3">검색 후 선택하면 수정 화면이 열려요</p>
+            <input
+              type="text"
+              value={loadSearchText}
+              onChange={e => setLoadSearchText(e.target.value)}
+              placeholder="🔍 거래처, 품목, 주문번호, 계약번호, B/L번호 검색..."
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3
+                         focus:outline-none focus:ring-2 focus:ring-orange-500"
+              autoFocus
+            />
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+              {loadFiltered.length === 0 ? (
+                <p className="text-center text-gray-400 py-8 text-sm">검색 결과가 없어요</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">주문번호</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">거래처</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">총액</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">유형</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">상태</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">주문일</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {loadFiltered.map(order => (
+                      <tr key={order.id}
+                        onClick={() => handleLoadSelect(order)}
+                        className="hover:bg-orange-50 cursor-pointer transition-colors">
+                        <td className="px-3 py-2 font-mono text-gray-700">{order.orderNo}</td>
+                        <td className="px-3 py-2 font-medium text-gray-800">{order.partner}</td>
+                        <td className="px-3 py-2 text-gray-600">{order.item}</td>
+                        <td className="px-3 py-2 text-gray-800">₩{order.total.toLocaleString()}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                            ${order.type === '매입' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                            {order.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                            ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{order.orderDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="flex justify-between items-center mt-4">
+              <span className="text-xs text-gray-400">{loadFiltered.length}건</span>
+              <button onClick={() => setShowLoadModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                닫기
               </button>
             </div>
           </div>
