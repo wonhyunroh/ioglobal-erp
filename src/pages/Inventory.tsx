@@ -65,6 +65,7 @@ export default function Inventory() {
   const [saving, setSaving] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [filterCategory, setFilterCategory] = useState('전체');
+  const [filterMonth, setFilterMonth] = useState('');
 
   // ── 앱 시작 시 서버에서 재고 목록 불러오기 ──
   useEffect(() => {
@@ -196,8 +197,21 @@ export default function Inventory() {
     const matchSearch = !searchText ||
       item.item.toLowerCase().includes(searchText.toLowerCase()) ||
       item.category.toLowerCase().includes(searchText.toLowerCase());
-    return matchCategory && matchSearch;
+    const matchMonth = !filterMonth || (item.lastUpdated || '').startsWith(filterMonth);
+    return matchCategory && matchSearch && matchMonth;
   });
+
+  // 월 이동 헬퍼
+  const changeMonth = (dir: number) => {
+    if (!filterMonth) {
+      const d = new Date();
+      setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+      return;
+    }
+    const [y, m] = filterMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  };
 
   return (
     <div>
@@ -225,6 +239,30 @@ export default function Inventory() {
             + 품목 추가
           </button>
         </div>
+      </div>
+
+      {/* ── 월별 선택 ── */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => changeMonth(-1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">◀</button>
+        <input type="month" value={filterMonth}
+          onChange={e => setFilterMonth(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button onClick={() => changeMonth(1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">▶</button>
+        {filterMonth && (
+          <button onClick={() => setFilterMonth('')}
+            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+            전체 보기
+          </button>
+        )}
+        {filterMonth && (
+          <span className="text-sm font-medium text-gray-700">
+            {filterMonth.replace('-', '년 ')}월 업데이트 기준
+          </span>
+        )}
       </div>
 
       {/* ── 검색 + 필터 ── */}

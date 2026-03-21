@@ -77,6 +77,7 @@ export type Partner = {
   type: '매입처' | '매출처';
   mainItem: string;
   memo: string;
+  createdAt: string;
 };
 
 // 품목
@@ -148,18 +149,19 @@ export type CostFixedFee = {
 
 // 서버 응답 row → Partner 타입으로 변환
 const toPartner = (row: any): Partner => ({
-  id:       row.id,
-  company:  row.name,     // DB name → 클라이언트 company
-  contact:  row.contact,
-  phone:    row.phone,
-  country:  row.country,
-  type:     row.type,
-  mainItem: row.address,  // DB address → 클라이언트 mainItem (주요품목)
-  memo:     row.memo,
+  id:        row.id,
+  company:   row.name,      // DB name → 클라이언트 company
+  contact:   row.contact,
+  phone:     row.phone,
+  country:   row.country,
+  type:      row.type,
+  mainItem:  row.address,   // DB address → 클라이언트 mainItem (주요품목)
+  memo:      row.memo,
+  createdAt: row.createdAt || '',
 });
 
 // Partner 타입 → 서버 요청 body로 변환
-const fromPartner = (p: Omit<Partner, 'id'>) => ({
+const fromPartner = (p: Omit<Partner, 'id' | 'createdAt'>) => ({
   name:    p.company,    // 클라이언트 company → DB name
   type:    p.type,
   country: p.country,
@@ -178,12 +180,12 @@ export const loadPartners = async (): Promise<Partner[]> => {
   catch { return []; }
 };
 
-export const savePartner = async (p: Omit<Partner, 'id'>): Promise<Partner> => {
+export const savePartner = async (p: Omit<Partner, 'id' | 'createdAt'>): Promise<Partner> => {
   const result = await api('POST', '/api/partners', fromPartner(p));
   return toPartner(result);
 };
 
-export const updatePartner = async (id: number, p: Omit<Partner, 'id'>): Promise<Partner> => {
+export const updatePartner = async (id: number, p: Omit<Partner, 'id' | 'createdAt'>): Promise<Partner> => {
   const result = await api('PUT', `/api/partners/${id}`, fromPartner(p));
   return toPartner(result);
 };

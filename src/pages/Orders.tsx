@@ -62,6 +62,7 @@ export default function Orders() {
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterType, setFilterType]     = useState('전체');
   const [searchText, setSearchText]     = useState('');
+  const [filterMonth, setFilterMonth]   = useState(''); // '' = 전체, '2026-03' = 해당월
 
   useEffect(() => {
     const load = async () => {
@@ -237,15 +238,25 @@ export default function Orders() {
     formData.type === '매입' ? p.type === '매입처' : p.type === '매출처'
   );
 
-  // 예상 매출 vs 출고 매출
-  const expectedSales = orders
+  // 월 필터 적용된 주문 목록
+  const monthOrders = filterMonth
+    ? orders.filter(o => o.orderDate.startsWith(filterMonth))
+    : orders;
+
+  // 예상 매출 vs 출고 매출 (월 필터 적용)
+  const expectedSales = monthOrders
     .filter(o => o.type === '매출' && !['출고완료', '정산완료'].includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
-  const actualSales = orders
+  const actualSales = monthOrders
     .filter(o => o.type === '매출' && ['출고완료', '정산완료'].includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
 
-  const filteredOrders = orders.filter(o => {
+  // 매입 합계 (월 필터 적용)
+  const monthlyPurchase = monthOrders
+    .filter(o => o.type === '매입')
+    .reduce((sum, o) => sum + o.total, 0);
+
+  const filteredOrders = monthOrders.filter(o => {
     const matchStatus = filterStatus === '전체' || o.status === filterStatus;
     const matchType   = filterType === '전체' || o.type === filterType;
     const matchSearch = !searchText ||
@@ -256,6 +267,18 @@ export default function Orders() {
       (o.blNo || '').toLowerCase().includes(searchText.toLowerCase());
     return matchStatus && matchType && matchSearch;
   });
+
+  // 월 이동 헬퍼
+  const changeMonth = (dir: number) => {
+    if (!filterMonth) {
+      const d = new Date();
+      setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+      return;
+    }
+    const [y, m] = filterMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  };
 
   return (
     <div>
@@ -284,8 +307,32 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* ── 매출 요약 ── */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* ── 월별 선택 ── */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => changeMonth(-1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">◀</button>
+        <input type="month" value={filterMonth}
+          onChange={e => setFilterMonth(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button onClick={() => changeMonth(1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">▶</button>
+        {filterMonth && (
+          <button onClick={() => setFilterMonth('')}
+            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+            전체 보기
+          </button>
+        )}
+        {filterMonth && (
+          <span className="text-sm font-medium text-gray-700">
+            {filterMonth.replace('-', '년 ')}월
+          </span>
+        )}
+      </div>
+
+      {/* ── 매출/매입 요약 ── */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
           <p className="text-xs text-blue-600 font-medium mb-1">예상 매출 (출고 전)</p>
           <p className="text-base font-bold text-blue-800">
@@ -296,6 +343,12 @@ export default function Orders() {
           <p className="text-xs text-green-600 font-medium mb-1">출고 매출 (출고완료)</p>
           <p className="text-base font-bold text-green-800">
             ₩{actualSales.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-indigo-600 font-medium mb-1">매입 합계</p>
+          <p className="text-base font-bold text-indigo-800">
+            ₩{monthlyPurchase.toLocaleString()}
           </p>
         </div>
       </div>

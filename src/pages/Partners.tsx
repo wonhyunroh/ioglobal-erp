@@ -39,7 +39,7 @@ const TABLE_HEADERS = [
 // ──────────────────────────────────────────────
 // 빈 거래처 객체 (새 거래처 추가 시 초기값)
 // ──────────────────────────────────────────────
-const EMPTY_PARTNER: Omit<Partner, 'id'> = {
+const EMPTY_PARTNER: Omit<Partner, 'id' | 'createdAt'> = {
   company: '',
   contact: '',
   phone: '',
@@ -54,9 +54,10 @@ export default function Partners() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
-  const [formData, setFormData] = useState<Omit<Partner, 'id'>>(EMPTY_PARTNER);
+  const [formData, setFormData] = useState<Omit<Partner, 'id' | 'createdAt'>>(EMPTY_PARTNER);
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('전체');
+  const [filterMonth, setFilterMonth] = useState('');
 
   // ── 앱 시작 시 저장된 거래처 불러오기 ──
   useEffect(() => {
@@ -136,8 +137,21 @@ export default function Partners() {
       p.contact.toLowerCase().includes(searchText.toLowerCase()) ||
       p.mainItem.toLowerCase().includes(searchText.toLowerCase()) ||
       p.country.toLowerCase().includes(searchText.toLowerCase());
-    return matchType && matchSearch;
+    const matchMonth = !filterMonth || (p.createdAt || '').startsWith(filterMonth);
+    return matchType && matchSearch && matchMonth;
   });
+
+  // 월 이동 헬퍼
+  const changeMonth = (dir: number) => {
+    if (!filterMonth) {
+      const d = new Date();
+      setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+      return;
+    }
+    const [y, m] = filterMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  };
 
   return (
     <div>
@@ -166,6 +180,30 @@ export default function Partners() {
             + 거래처 추가
           </button>
         </div>
+      </div>
+
+      {/* ── 월별 선택 ── */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => changeMonth(-1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">◀</button>
+        <input type="month" value={filterMonth}
+          onChange={e => setFilterMonth(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button onClick={() => changeMonth(1)}
+          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">▶</button>
+        {filterMonth && (
+          <button onClick={() => setFilterMonth('')}
+            className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+            전체 보기
+          </button>
+        )}
+        {filterMonth && (
+          <span className="text-sm font-medium text-gray-700">
+            {filterMonth.replace('-', '년 ')}월 등록 기준
+          </span>
+        )}
       </div>
 
       {/* ── 검색 + 필터 ── */}
