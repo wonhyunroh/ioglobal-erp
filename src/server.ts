@@ -32,6 +32,7 @@ import { createUsersRouter }     from '../server/src/routes/users';
 import { createCostRouter }      from '../server/src/routes/cost';
 import { createRatesRouter }     from '../server/src/routes/rates';
 import { createBackupRouter }    from '../server/src/routes/backup';
+import { createWorkFeesRouter } from '../server/src/routes/work-fees';
 
 const PORT = 4000;
 
@@ -131,6 +132,21 @@ export function startServer(): void {
         label TEXT    NOT NULL DEFAULT '',
         unit  TEXT    NOT NULL DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS work_fees (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        yearMonth      TEXT NOT NULL DEFAULT '',
+        location       TEXT NOT NULL DEFAULT '광양',
+        partner        TEXT NOT NULL DEFAULT '',
+        item           TEXT NOT NULL DEFAULT '',
+        weightKg       REAL NOT NULL DEFAULT 0,
+        salesPrice     REAL NOT NULL DEFAULT 0,
+        salesAmount    REAL NOT NULL DEFAULT 0,
+        purchasePrice  REAL NOT NULL DEFAULT 0,
+        purchaseAmount REAL NOT NULL DEFAULT 0,
+        memo           TEXT NOT NULL DEFAULT '',
+        createdAt      TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
     `);
 
     // ── 컬럼 마이그레이션 (기존 DB 대응) ──
@@ -177,6 +193,7 @@ export function startServer(): void {
     use('/api/cost',      createCostRouter(db));
     use('/api/rates',     createRatesRouter(db));
     use('/api/backup',    createBackupRouter(db));
+    use('/api/work-fees', createWorkFeesRouter(db));
 
     // ── 헬스체크 ──
     expressApp.get('/api/health', (_req, res) => res.json({ ok: true }));

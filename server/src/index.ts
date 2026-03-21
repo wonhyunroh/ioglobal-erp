@@ -24,6 +24,7 @@ import { createCostRouter }      from './routes/cost';
 import { createRatesRouter }     from './routes/rates';
 import { createBackupRouter }    from './routes/backup';
 import { createCostCalcRouter }  from './routes/cost-calc';
+import { createWorkFeesRouter } from './routes/work-fees';
 
 const app  = express();
 // Railway는 PORT 환경변수를 자동으로 설정해요
@@ -155,6 +156,22 @@ db.exec(`
     unit  TEXT    NOT NULL DEFAULT ''
   );
 
+  -- ── 작업비 내역 테이블 ──
+  CREATE TABLE IF NOT EXISTS work_fees (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    yearMonth      TEXT NOT NULL DEFAULT '',
+    location       TEXT NOT NULL DEFAULT '광양',
+    partner        TEXT NOT NULL DEFAULT '',
+    item           TEXT NOT NULL DEFAULT '',
+    weightKg       REAL NOT NULL DEFAULT 0,
+    salesPrice     REAL NOT NULL DEFAULT 0,
+    salesAmount    REAL NOT NULL DEFAULT 0,
+    purchasePrice  REAL NOT NULL DEFAULT 0,
+    purchaseAmount REAL NOT NULL DEFAULT 0,
+    memo           TEXT NOT NULL DEFAULT '',
+    createdAt      TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+  );
+
   -- ── 저장된 수입원가 계산 테이블 ──
   CREATE TABLE IF NOT EXISTS cost_calculations (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,6 +241,7 @@ app.use('/api/cost',      createCostRouter(db));
 app.use('/api/rates',     createRatesRouter(db));
 app.use('/api/backup',     createBackupRouter(db));
 app.use('/api/cost-calc', createCostCalcRouter(db));
+app.use('/api/work-fees', createWorkFeesRouter(db));
 
 // ──────────────────────────────────────────────
 // 챗봇 API

@@ -138,6 +138,39 @@ export type CostFixedFee = {
   memo: string;
 };
 
+// 작업비 내역
+export type WorkFee = {
+  id: number;
+  yearMonth: string;
+  location: '광양' | '녹산' | '두동';
+  partner: string;
+  item: string;
+  weightKg: number;
+  salesPrice: number;
+  salesAmount: number;
+  purchasePrice: number;
+  purchaseAmount: number;
+  memo: string;
+};
+
+// ──────────────────────────────────────────────
+// 작업비 API 함수
+// ──────────────────────────────────────────────
+
+export const loadWorkFees = async (): Promise<WorkFee[]> => {
+  try { return await api('GET', '/api/work-fees'); }
+  catch { return []; }
+};
+
+export const saveWorkFee = async (w: Omit<WorkFee, 'id'>): Promise<WorkFee> =>
+  api('POST', '/api/work-fees', w);
+
+export const updateWorkFee = async (id: number, w: Omit<WorkFee, 'id'>): Promise<WorkFee> =>
+  api('PUT', `/api/work-fees/${id}`, w);
+
+export const deleteWorkFee = async (id: number): Promise<void> =>
+  api('DELETE', `/api/work-fees/${id}`);
+
 // ──────────────────────────────────────────────
 // 거래처 API 함수
 //

@@ -24,7 +24,7 @@
 // ──────────────────────────────────────────────
 
 import * as XLSX from 'xlsx';
-import { Partner, Item, Order, InventoryItem } from './db';
+import { Partner, Item, Order, InventoryItem, WorkFee } from './db';
 
 // ──────────────────────────────────────────────
 // Excel 파일 파싱 헬퍼 (거래처/품목 불러오기용)
@@ -319,4 +319,45 @@ export const exportCostCalc = (result: {
   ];
 
   downloadExcel(data, `수입원가계산_${r.blNo || r.contractNo || today()}`);
+};
+
+// ──────────────────────────────────────────────
+// 작업비 내역 내보내기
+// ──────────────────────────────────────────────
+export const exportWorkFees = (fees: WorkFee[], yearMonth: string) => {
+  const data = fees.map((f, i) => ({
+    'No': i + 1,
+    '년월': f.yearMonth,
+    '지역': f.location,
+    '거래처': f.partner,
+    '품목': f.item,
+    '중량(kg)': f.weightKg,
+    '매출단가': f.salesPrice,
+    '매출액': f.salesAmount,
+    '매입단가': f.purchasePrice,
+    '매입액': f.purchaseAmount,
+    '영업이익': f.salesAmount - f.purchaseAmount,
+    '메모': f.memo,
+  }));
+
+  // 합계 행 추가
+  const totalWeight = fees.reduce((s, f) => s + f.weightKg, 0);
+  const totalSales = fees.reduce((s, f) => s + f.salesAmount, 0);
+  const totalPurchase = fees.reduce((s, f) => s + f.purchaseAmount, 0);
+  data.push({
+    'No': 0 as any,
+    '년월': '',
+    '지역': '합계',
+    '거래처': '',
+    '품목': '',
+    '중량(kg)': totalWeight,
+    '매출단가': 0,
+    '매출액': totalSales,
+    '매입단가': 0,
+    '매입액': totalPurchase,
+    '영업이익': totalSales - totalPurchase,
+    '메모': '',
+  });
+
+  downloadExcel(data, `작업비내역_${yearMonth}`);
 };

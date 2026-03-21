@@ -26,6 +26,7 @@ import Items     from './pages/Items';
 import Orders    from './pages/Orders';
 import Inventory from './pages/Inventory';
 import CostCalc  from './pages/CostCalc';
+import WorkFees  from './pages/WorkFees';
 import Login     from './pages/Login';
 import Users     from './pages/Users';
 import Backup    from './pages/Backup';
@@ -42,6 +43,7 @@ const MENUS = [
   { id: 'items',     label: '품목 관리',     icon: '🌽', adminOnly: false },
   { id: 'orders',    label: '주문 관리',     icon: '📋', adminOnly: false },
   { id: 'inventory', label: '재고 관리',     icon: '📦', adminOnly: false },
+  { id: 'workfees',  label: '작업비 관리',   icon: '🏭', adminOnly: false },
   { id: 'costcalc',  label: '수입원가 계산', icon: '💰', adminOnly: false },
   { id: 'users',     label: '계정 관리',     icon: '👤', adminOnly: true  },
   { id: 'backup',    label: '백업 / 복원',   icon: '🗄️', adminOnly: true  },
@@ -100,6 +102,7 @@ export default function App() {
       case 'items':      return <Items />;
       case 'orders':     return <Orders />;
       case 'inventory':  return <Inventory />;
+      case 'workfees':   return <WorkFees />;
       case 'costcalc':   return <CostCalc currentUser={currentUser!} />;
       case 'users':      return <Users currentUser={currentUser!} />;
       case 'backup':     return <Backup currentUser={currentUser!} />;
