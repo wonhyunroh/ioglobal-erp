@@ -88,7 +88,8 @@ export default function Backup({ currentUser }: Props) {
       const buffer  = Array.from(encoder.encode(jsonString));
 
       // 오늘 날짜 (파일명에 사용)
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const d = new Date();
+      const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
 
       // Electron 환경: 저장 다이얼로그 / 웹 환경: 브라우저 다운로드
       if (typeof window.electronAPI !== 'undefined') {

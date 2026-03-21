@@ -19,9 +19,9 @@ import { exportItems, parseExcelFile } from '../excel';
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
 ];
-const UNITS = ['톤', 'KG', 'MT'];
+const UNITS = ['t', 'kg', 'mt'];
 const TABLE_HEADERS = [
-  'No', '품목명', '화주', '단위', '기준단가', '원산지', '메모', '관리'
+  'No', '화주', '품목명', '단위', '기준단가', '원산지', '메모', '관리'
 ];
 // 단가 단위 옵션 (표시용, 실제 저장은 항상 원 단위)
 const PRICE_UNITS = [
@@ -30,7 +30,7 @@ const PRICE_UNITS = [
   { label: '100만원', multiplier: 1000000 },
 ];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
-  name: '', category: '옥수수', unit: '톤',
+  name: '', category: '옥수수', unit: 't',
   price: 0, origin: '', memo: '',
 };
 
@@ -127,7 +127,7 @@ export default function Items() {
           const item: Omit<Item, 'id'> = {
             name,
             category: String(row['화주'] || row['카테고리'] || row['category'] || '기타'),
-            unit:     String(row['단위'] || row['unit'] || '톤'),
+            unit:     String(row['단위'] || row['unit'] || 't'),
             price:    Number(row['기준단가'] || row['price'] || 0),
             origin:   String(row['원산지'] || row['origin'] || ''),
             memo:     String(row['메모'] || row['memo'] || ''),
@@ -200,7 +200,7 @@ export default function Items() {
                   <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 rounded-full text-xs font-medium
-                                     bg-yellow-100 text-yellow-700">
+                                     bg-green-100 text-green-700">
                       {item.category}
                     </span>
                   </td>
@@ -238,11 +238,11 @@ export default function Items() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  품목명 <span className="text-red-500">*</span>
+                  화주 <span className="text-red-500">*</span>
                 </label>
                 <input type="text" name="name"
                   value={formData.name} onChange={handleChange}
-                  placeholder="예: 옥수수 (미국산)"
+                  placeholder="예: 카길퓨리나, CJ제일제당"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -250,7 +250,7 @@ export default function Items() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    화주
+                    품목명
                   </label>
                   <select name="category" value={formData.category}
                     onChange={handleChange}
@@ -314,7 +314,7 @@ export default function Items() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  상차/하차
+                  메모
                 </label>
                 <textarea name="memo" value={formData.memo} onChange={handleChange}
                   rows={3}

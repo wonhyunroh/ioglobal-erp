@@ -55,7 +55,14 @@ export const rules: Required<ModuleOptions>['rules'] = [
     },
   },
 
-  // ── 규칙 4: CSS 파일 (Tailwind CSS 포함) ──
+  // ── 규칙 4: 이미지/SVG 파일 ──
+  // 로고 등 이미지 파일을 URL로 변환해요
+  {
+    test: /\.(svg|png|jpg|jpeg|gif)$/,
+    type: 'asset/resource',
+  },
+
+  // ── 규칙 5: CSS 파일 (Tailwind CSS 포함) ──
   // CSS 파일을 화면에 적용하기까지 3단계로 처리해요
   // webpack은 배열을 오른쪽 → 왼쪽 순서로 실행해요
   //

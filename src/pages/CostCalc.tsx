@@ -124,16 +124,19 @@ function calcResults(
   const loss              = subtotal * r.LOSS_RATE;
   const total             = subtotal + loss;
   const blQuantityKg      = v.blQuantity * 1000;
-  const pricePerKgLoad    = blQuantityKg > 0 ? total / blQuantityKg : 0;
-  const pricePerKgDelivery = pricePerKgLoad + v.transportFee;
-  // 공급단가 = 도착도단가 + 마진 (반올림)
-  const supplyPrice       = Math.round(pricePerKgDelivery + v.margin);
+  const pricePerKgLoad    = blQuantityKg > 0 ? total / blQuantityKg : 0;       // 상차도 원가
+  const pricePerKgDelivery = pricePerKgLoad + v.transportFee;                  // 도착도 원가
+  const loadingSellingPrice  = Math.round(pricePerKgLoad + v.margin);          // 상차도 판매단가
+  const deliverySellingPrice = Math.round(pricePerKgDelivery + v.margin);      // 도착도 판매단가
+  // 하위 호환용
+  const supplyPrice = deliverySellingPrice;
 
   return {
     goodsPrice, tariff, lcOpenFee, insurance, importInterest, termCg,
     workFee, relocate, foodRelocate, foodInspect, doFeeTotal,
     wharfageTotal, ccTotal, thcTotal, customsFee,
-    subtotal, loss, total, pricePerKgLoad, pricePerKgDelivery, supplyPrice,
+    subtotal, loss, total, pricePerKgLoad, pricePerKgDelivery,
+    loadingSellingPrice, deliverySellingPrice, supplyPrice,
   };
 }
 
@@ -161,6 +164,7 @@ export default function CostCalc({ currentUser }: Props) {
   const [rateLoading, setRateLoading]   = useState(false);
   const [rateUpdatedAt, setRateUpdatedAt] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exchangePlusOne, setExchangePlusOne] = useState(true); // 환율 +1원 적용
   // ── 저장/불러오기 ──
   const [savedCalcs, setSavedCalcs]   = useState<CostCalcRecord[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -205,9 +209,10 @@ export default function CostCalc({ currentUser }: Props) {
       const res  = await fetch('https://open.er-api.com/v6/latest/USD');
       const data = await res.json();
       if (data.result === 'success') {
+        const rawRate = Math.round(data.rates.KRW * 100) / 100;
         setCore(prev => ({
           ...prev,
-          exchangeRate: Math.round(data.rates.KRW * 100) / 100
+          exchangeRate: exchangePlusOne ? rawRate + 1 : rawRate,
         }));
         setRateUpdatedAt(new Date().toLocaleTimeString('ko-KR'));
       }
@@ -429,9 +434,9 @@ export default function CostCalc({ currentUser }: Props) {
                 </div>
               ))}
               {[
-                { label: 'B/L 원료량',  name: 'blQuantity',   unit: '톤',    step: '0.001' },
-                { label: '수입단가',    name: 'importPrice',  unit: 'US$/톤', step: '0.01' },
-                { label: '컨테이너 수', name: 'containers',   unit: 'EA',    step: '1' },
+                { label: 'B/L 원료량',  name: 'blQuantity',   unit: 't',     step: '0.001' },
+                { label: '수입단가',    name: 'importPrice',  unit: 'US$/t', step: '0.01' },
+                { label: '컨테이너 수', name: 'containers',   unit: 'ea',    step: '1' },
                 { label: '관세율',      name: 'tariffRate',   unit: '%',     step: '0.1' },
                 { label: '운송료',      name: 'transportFee', unit: '원/kg', step: '1' },
                 { label: '마진',        name: 'margin',       unit: '원/kg', step: '1' },
@@ -473,9 +478,22 @@ export default function CostCalc({ currentUser }: Props) {
                   </button>
                 </div>
               </div>
+              {/* 환율 +1원 적용 토글 */}
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox"
+                    checked={exchangePlusOne}
+                    onChange={e => setExchangePlusOne(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600
+                               focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">환율 +1원 적용</span>
+                </label>
+              </div>
               {rateUpdatedAt && (
                 <div className="text-xs text-green-600 text-right">
                   ✅ 환율 업데이트: {rateUpdatedAt}
+                  {exchangePlusOne && ' (+1원)'}
                 </div>
               )}
             </div>
@@ -604,7 +622,7 @@ export default function CostCalc({ currentUser }: Props) {
                             <span className="text-xs text-gray-400 ml-1">({r.unit})</span>
                           </span>
                           <span className="text-sm font-medium text-gray-700">
-                            {r.unit === '원/톤'
+                            {r.unit === '원/t'
                               ? `₩${r.value.toLocaleString()}`
                               : r.unit === '일'
                                 ? `${r.value}일`
@@ -684,25 +702,35 @@ export default function CostCalc({ currentUser }: Props) {
               📊 최종 단가 요약
             </h3>
             <div className="space-y-3">
+              {/* 원가 섹션 */}
               <div className="flex justify-between items-center">
-                <span className="text-blue-200 text-sm">상차도 단가</span>
+                <span className="text-blue-200 text-sm">상차도 원가</span>
                 <span className="font-bold text-lg">
                   ₩{formatKRW(result.pricePerKgLoad)}
                   <span className="text-xs text-blue-300 ml-1">/kg</span>
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-blue-200 text-sm">도착도 단가</span>
+                <span className="text-blue-200 text-sm">도착도 원가</span>
                 <span className="font-bold text-lg">
                   ₩{formatKRW(result.pricePerKgDelivery)}
                   <span className="text-xs text-blue-300 ml-1">/kg</span>
                 </span>
               </div>
+              {/* 판매단가 섹션 */}
               <div className="border-t border-blue-700 pt-3">
+                <p className="text-xs text-blue-400 mb-2">마진 적용 판매단가</p>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-blue-100 font-medium text-sm">상차도 판매단가</span>
+                  <span className="font-bold text-lg text-green-300">
+                    ₩{formatKRW(result.loadingSellingPrice)}
+                    <span className="text-xs text-blue-300 ml-1">/kg</span>
+                  </span>
+                </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-white font-bold">🎯 공급단가</span>
+                  <span className="text-white font-bold">도착도 판매단가</span>
                   <span className="font-bold text-2xl text-yellow-300">
-                    ₩{formatKRW(result.supplyPrice)}
+                    ₩{formatKRW(result.deliverySellingPrice)}
                     <span className="text-sm text-blue-300 ml-1">/kg</span>
                   </span>
                 </div>

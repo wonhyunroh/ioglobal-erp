@@ -31,7 +31,10 @@ const TABLE_HEADERS = [
   '수량', '단가', '총액', '주문일', '납기일', '유형', '상태', '관리'
 ];
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
 
 const generateOrderNo = (count: number) => {
   const year = new Date().getFullYear();
@@ -88,7 +91,7 @@ export default function Orders() {
         );
         if (!confirmed) return false;
         const newItem = await saveInventoryItem({
-          item: itemName, category: '', unit: '톤',
+          item: itemName, category: '', unit: 't',
           current: quantity, minStock: 0,
           lastUpdated: today(), memo: '주문 입고완료로 자동 등록',
         });
@@ -256,7 +259,7 @@ export default function Orders() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => exportDailyShipments(orders, new Date().toISOString().split('T')[0])}
+            onClick={() => exportDailyShipments(orders, today())}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📥 일출고 저장

@@ -31,6 +31,7 @@ import Users     from './pages/Users';
 import Backup    from './pages/Backup';
 import { User, loginUser } from './db';
 import Chatbot from './components/Chatbot';
+import logoSvg from './assets/logo.svg';
 
 // ──────────────────────────────────────────────
 // 사이드바 메뉴 목록
@@ -127,7 +128,7 @@ export default function App() {
         {/* 로고 */}
         <div className="px-5 py-5 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🌾</span>
+            <img src={logoSvg} alt="IO Global" className="w-9 h-9 rounded-lg" />
             <div>
               <h1 className="text-base font-bold text-gray-800">IO Global</h1>
               <p className="text-xs text-gray-400">IO Global ERP</p>

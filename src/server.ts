@@ -156,7 +156,7 @@ export function startServer(): void {
       { key: 'CUSTOMS_RATE1',        value: 0.10,      label: '통관수수료율1', unit: '율' },
       { key: 'CUSTOMS_RATE2',        value: 0.007,     label: '통관수수료율2', unit: '율' },
       { key: 'LOSS_RATE',            value: 0.003,     label: '감모손실율',    unit: '율' },
-      { key: 'WORK_FEE_PER_TON',     value: 13000,     label: '작업비',        unit: '원/톤' },
+      { key: 'WORK_FEE_PER_TON',     value: 13000,     label: '작업비',        unit: '원/t' },
     ];
     const insertRate = db.prepare(`INSERT OR IGNORE INTO calc_rates (key, value, label, unit) VALUES (?, ?, ?, ?)`);
     for (const r of defaultRates) insertRate.run(r.key, r.value, r.label, r.unit);

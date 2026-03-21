@@ -17,6 +17,7 @@
 // ──────────────────────────────────────────────
 
 import React, { useState } from 'react';
+import logoSvg from '../assets/logo.svg';
 
 type Props = {
   // username, password 를 받아서 서버에 요청해요
@@ -56,7 +57,7 @@ export default function Login({ onLogin, error, loading }: Props) {
 
         {/* ── 로고/타이틀 ── */}
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">🌾</div>
+          <img src={logoSvg} alt="IO Global" className="w-20 h-20 mx-auto mb-4 rounded-xl" />
           <h1 className="text-3xl font-bold text-gray-800">IO Global</h1>
           <p className="text-gray-500 mt-2">농산물 무역 ERP 시스템</p>
         </div>

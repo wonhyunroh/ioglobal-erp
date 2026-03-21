@@ -53,8 +53,10 @@ export const parseExcelFile = (file: File): Promise<any[]> => {
 // 파일명에 날짜를 붙여서 구분하기 쉽게 해요
 // 예: 20260312
 // ──────────────────────────────────────────────
-const today = () =>
-  new Date().toISOString().slice(0, 10).replace(/-/g, '');
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+};
 
 // ──────────────────────────────────────────────
 // 공통 엑셀 다운로드 함수
@@ -137,8 +139,8 @@ export const exportPartners = (partners: Partner[]) => {
 export const exportItems = (items: Item[]) => {
   const data = items.map((item, i) => ({
     'No':       i + 1,
-    '품목명':   item.name,
-    '카테고리': item.category,
+    '화주':     item.name,
+    '품목명':   item.category,
     '단위':     item.unit,
     '기준단가': item.price,
     '원산지':   item.origin,
@@ -286,7 +288,7 @@ export const exportCostCalc = (result: {
     { '항목': '품대',       '산식': 'B/L량×단가×환율',               '건수': '',  '금액(원)': Math.round(r.goodsCost),         'kg당금액(원/kg)': perKg(r.goodsCost),         '비고': '' },
     { '항목': '수입이자',   '산식': '품대×1.75%×120/360',            '건수': '',  '금액(원)': Math.round(r.importInterest),    'kg당금액(원/kg)': perKg(r.importInterest),    '비고': '' },
     { '항목': 'TERM CG',    '산식': '품대×1.8%×150/360',             '건수': '',  '금액(원)': Math.round(r.termCg),            'kg당금액(원/kg)': perKg(r.termCg),            '비고': '' },
-    { '항목': '작업비',     '산식': `B/L량×작업비/톤`,                '건수': '',  '금액(원)': Math.round(r.workFee),           'kg당금액(원/kg)': perKg(r.workFee),           '비고': '' },
+    { '항목': '작업비',     '산식': `B/L량×작업비/t`,                '건수': '',  '금액(원)': Math.round(r.workFee),           'kg당금액(원/kg)': perKg(r.workFee),           '비고': '' },
     { '항목': '작업이적비', '산식': '',                               '건수': r.containers, '금액(원)': Math.round(r.relocate),     'kg당금액(원/kg)': perKg(r.relocate),     '비고': '' },
     { '항목': '식검이적비', '산식': '',                               '건수': r.containers, '금액(원)': Math.round(r.foodRelocate), 'kg당금액(원/kg)': perKg(r.foodRelocate), '비고': '' },
     { '항목': '식검수수료', '산식': '',                               '건수': 1,  '금액(원)': Math.round(r.foodInspect),       'kg당금액(원/kg)': perKg(r.foodInspect),       '비고': 'B/L기준' },
@@ -310,8 +312,8 @@ export const exportCostCalc = (result: {
     { '항목': '단가(도착도)', '산식': `운송료 ${r.freight}원/kg`,      '건수': '',  '금액(원)': '',                              'kg당금액(원/kg)': Math.round(r.arrivalPrice * 100)/100, '비고': '' },
     { '항목': '', '산식': '', '건수': '', '금액(원)': '', 'kg당금액(원/kg)': '', '비고': '' },
     // ── 입력값 요약 ──
-    { '항목': 'B/L원료량 (톤)',  '산식': '',  '건수': '',        '금액(원)': r.blAmount,     'kg당금액(원/kg)': '',                          '비고': '금액단위:원' },
-    { '항목': '수입단가 (US$/톤)','산식': '', '건수': '환율',    '금액(원)': r.importPrice,  'kg당금액(원/kg)': r.exchangeRate,              '비고': '' },
+    { '항목': 'B/L원료량 (t)',   '산식': '',  '건수': '',        '금액(원)': r.blAmount,     'kg당금액(원/kg)': '',                          '비고': '금액단위:원' },
+    { '항목': '수입단가 (US$/t)', '산식': '', '건수': '환율',    '금액(원)': r.importPrice,  'kg당금액(원/kg)': r.exchangeRate,              '비고': '' },
     { '항목': '마진',            '산식': '공급단가-도착도단가', '건수': '', '금액(원)': r.margin, 'kg당금액(원/kg)': '',                       '비고': '원/kg' },
     { '항목': '공급단가',        '산식': '도착도단가+마진',     '건수': r.salesQty, '금액(원)': Math.round(r.supplyPrice), 'kg당금액(원/kg)': '판매수입단가', '비고': '원/kg' },
   ];

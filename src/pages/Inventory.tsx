@@ -30,14 +30,17 @@ import { exportInventory } from '../excel';
 const CATEGORIES = [
   '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
 ];
-const UNITS = ['톤', 'kg', 'MT'];
+const UNITS = ['t', 'kg', 'mt'];
 const TABLE_HEADERS = [
   'No', '품목명', '화주', '단위', '현재재고', '최소재고', '상태', '최근업데이트', '관리'
 ];
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
 
 const EMPTY_ITEM: Omit<InventoryItem, 'id'> = {
-  item: '', category: '옥수수', unit: '톤',
+  item: '', category: '옥수수', unit: 't',
   current: 0, minStock: 0,
   lastUpdated: today(), memo: '',
 };

@@ -54,17 +54,26 @@ export default function Dashboard() {
   }, []);
 
   // ── 이번 달 기준 날짜 ──
-  const thisMonth = new Date().toISOString().slice(0, 7); // "2026-03"
+  // ── 이번 달 기준 (한국 시간) ──
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
-  // ── 이번 달 매출 합계 ──
-  // 주문 유형이 '매출'이고 이번 달 주문인 것의 총액 합계
-  const monthlySales = orders
-    .filter(o => o.type === '매출' && o.orderDate.startsWith(thisMonth))
+  // ── 이번 달 매출 (예상 vs 출고) ──
+  const monthSalesOrders = orders.filter(o => o.type === '매출' && o.orderDate.startsWith(thisMonth));
+  const expectedSales = monthSalesOrders
+    .filter(o => !['출고완료', '정산완료'].includes(o.status))
+    .reduce((sum, o) => sum + o.total, 0);
+  const actualSales = monthSalesOrders
+    .filter(o => ['출고완료', '정산완료'].includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
 
-  // ── 이번 달 매입 합계 ──
-  const monthlyPurchase = orders
-    .filter(o => o.type === '매입' && o.orderDate.startsWith(thisMonth))
+  // ── 이번 달 매입 (예상 통관 vs 원화 매입) ──
+  const monthPurchaseOrders = orders.filter(o => o.type === '매입' && o.orderDate.startsWith(thisMonth));
+  const expectedPurchase = monthPurchaseOrders
+    .filter(o => !['입고완료', '정산완료'].includes(o.status))
+    .reduce((sum, o) => sum + o.total, 0);
+  const actualPurchase = monthPurchaseOrders
+    .filter(o => ['입고완료', '정산완료'].includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
 
   // ── 진행 중 주문 수 ──
@@ -84,18 +93,32 @@ export default function Dashboard() {
   // ── 요약 카드 데이터 ──
   const SUMMARY_CARDS = [
     {
-      title: '이번 달 매출',
-      value: `₩${monthlySales.toLocaleString()}`,
+      title: '예상 매출',
+      value: `₩${expectedSales.toLocaleString()}`,
       icon: '📈',
       color: 'bg-blue-500',
-      desc: '매출 주문 합계',
+      desc: '출고 전 매출 합계',
     },
     {
-      title: '이번 달 매입',
-      value: `₩${monthlyPurchase.toLocaleString()}`,
-      icon: '📉',
+      title: '출고 매출',
+      value: `₩${actualSales.toLocaleString()}`,
+      icon: '💰',
       color: 'bg-green-500',
-      desc: '매입 주문 합계',
+      desc: '출고완료 매출 합계',
+    },
+    {
+      title: '예상 통관 매입',
+      value: `₩${expectedPurchase.toLocaleString()}`,
+      icon: '📉',
+      color: 'bg-indigo-500',
+      desc: '입고 전 매입 합계',
+    },
+    {
+      title: '원화 매입',
+      value: `₩${actualPurchase.toLocaleString()}`,
+      icon: '🏦',
+      color: 'bg-cyan-500',
+      desc: '입고완료 매입 합계',
     },
     {
       title: '진행 중 주문',
@@ -164,7 +187,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── 요약 카드 4개 ── */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-3 gap-4 mb-8">
         {SUMMARY_CARDS.map((card, index) => (
           <div key={index}
                className="bg-white rounded-xl shadow-sm border border-gray-200

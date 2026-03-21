@@ -17,6 +17,16 @@
 //     openFile    → 파일 열기 다이얼로그 (백업 복원 시 사용)
 // ──────────────────────────────────────────────
 
+declare module '*.svg' {
+  const src: string;
+  export default src;
+}
+
+declare module '*.png' {
+  const src: string;
+  export default src;
+}
+
 export {};
 
 declare global {

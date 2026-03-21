@@ -38,6 +38,11 @@ const webConfig: Configuration = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader', 'postcss-loader'],
       },
+      // ── 이미지/SVG ──
+      {
+        test: /\.(svg|png|jpg|jpeg|gif)$/,
+        type: 'asset/resource',
+      },
       // 참고: node-loader, @vercel/webpack-asset-relocator-loader 는
       //       Electron 전용이므로 웹 빌드에서 제외
     ]
