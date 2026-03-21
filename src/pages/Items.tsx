@@ -23,12 +23,6 @@ const UNITS = ['t', 'kg', 'mt'];
 const TABLE_HEADERS = [
   'No', '화주', '품목명', '단위', '기준단가', '원산지', '메모', '관리'
 ];
-// 단가 단위 옵션 (표시용, 실제 저장은 항상 원 단위)
-const PRICE_UNITS = [
-  { label: '원',      multiplier: 1 },
-  { label: '만원',    multiplier: 10000 },
-  { label: '100만원', multiplier: 1000000 },
-];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
   name: '', category: '옥수수', unit: 't',
   price: 0, origin: '', memo: '',
@@ -40,7 +34,6 @@ export default function Items() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(EMPTY_ITEM);
-  const [priceUnitIdx, setPriceUnitIdx] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [filterCategory, setFilterCategory] = useState('전체');
   const [showLoadModal, setShowLoadModal] = useState(false);
@@ -128,9 +121,7 @@ export default function Items() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'price'
-        ? (Number(value) * PRICE_UNITS[priceUnitIdx].multiplier)  // 표시값 → 실제 원 단위로 변환
-        : value,
+      [name]: name === 'price' ? (Number(value) || 0) : value,
     }));
   };
 
@@ -302,32 +293,15 @@ export default function Items() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    기준 단가
+                    기준 단가 (원)
                   </label>
-                  <div className="flex gap-1">
-                    <input type="number" name="price"
-                      value={formData.price
-                        ? formData.price / PRICE_UNITS[priceUnitIdx].multiplier
-                        : ''}
-                      onChange={handleChange} min="0" step="0.1"
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2
-                                 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <select
-                      value={priceUnitIdx}
-                      onChange={e => setPriceUnitIdx(Number(e.target.value))}
-                      className="border border-gray-300 rounded-lg px-2 py-2 text-sm
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                      {PRICE_UNITS.map((u, i) => (
-                        <option key={u.label} value={i}>{u.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {formData.price > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      실제 저장값: ₩{formData.price.toLocaleString()}
-                    </p>
-                  )}
+                  <input type="number" name="price"
+                    value={formData.price || ''}
+                    onChange={handleChange} min="0" step="any"
+                    placeholder="예: 150000"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
