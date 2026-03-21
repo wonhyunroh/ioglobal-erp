@@ -21,8 +21,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Partner, Item,
-  loadPartners, loadItems,
+  Partner,
+  loadPartners,
   savePartner,
   updatePartner,
   deletePartner,
@@ -58,8 +58,6 @@ export default function Partners() {
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('전체');
   const [filterMonth, setFilterMonth] = useState('');
-  const [showLoadModal, setShowLoadModal] = useState(false);
-  const [masterItems, setMasterItems] = useState<Item[]>([]);
 
   // ── 앱 시작 시 저장된 거래처 불러오기 ──
   useEffect(() => {
@@ -71,18 +69,11 @@ export default function Partners() {
   }, []);
 
 
-  // ── 품목에서 불러오기: 품목 선택 → 거래처 추가 폼에 주요품목 자동 입력 ──
-  const handleOpenLoad = async () => {
-    const items = await loadItems();
-    setMasterItems(items);
-    setShowLoadModal(true);
-  };
-
-  const handleLoadFromItem = (item: Item) => {
-    setEditingPartner(null);
-    setFormData({ ...EMPTY_PARTNER, mainItem: item.category });
-    setShowLoadModal(false);
-    setShowModal(true);
+  // ── 서버에서 데이터 다시 불러오기 ──
+  const handleReload = async () => {
+    const data = await loadPartners();
+    setPartners(data);
+    alert(`${data.length}개 거래처 데이터를 불러왔어요!`);
   };
 
   const handleAdd = () => {
@@ -181,7 +172,7 @@ export default function Partners() {
         </div>
         
         <div className="flex gap-2">
-          <button onClick={handleOpenLoad}
+          <button onClick={handleReload}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📂 불러오기
@@ -456,58 +447,6 @@ export default function Partners() {
         </div>
       )}
 
-      {/* ── 품목에서 불러오기 모달 ── */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 품목에서 불러오기</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              품목을 선택하면 주요품목이 자동으로 채워진 거래처 추가 화면이 열려요
-            </p>
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-              {masterItems.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">등록된 품목이 없어요</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">화주</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목명</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">단가</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">원산지</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">선택</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {masterItems.map(item => (
-                      <tr key={item.id} className="hover:bg-blue-50">
-                        <td className="px-3 py-2 font-medium text-gray-800">{item.name}</td>
-                        <td className="px-3 py-2">
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">{item.category}</span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-600">₩{item.price.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.origin}</td>
-                        <td className="px-3 py-2">
-                          <button onClick={() => handleLoadFromItem(item)}
-                            className="text-xs px-3 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200">
-                            선택
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-end mt-4">
-              <button onClick={() => setShowLoadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

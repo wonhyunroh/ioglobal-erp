@@ -63,7 +63,6 @@ export default function Orders() {
   const [filterType, setFilterType]     = useState('전체');
   const [searchText, setSearchText]     = useState('');
   const [filterMonth, setFilterMonth]   = useState('');
-  const [showLoadModal, setShowLoadModal] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -142,19 +141,16 @@ export default function Orders() {
     return true;
   };
 
-  // ── 품목/거래처에서 불러오기 → 주문 추가 ──
-  const handleLoadItem = (item: Item, partner?: Partner) => {
-    setEditingOrder(null);
-    setFormData({
-      ...EMPTY_ORDER,
-      orderNo: generateOrderNo(orders.length),
-      item: item.name,
-      price: item.price,
-      partner: partner?.company || '',
-      type: partner?.type === '매출처' ? '매출' : '매입',
-    });
-    setShowLoadModal(false);
-    setShowModal(true);
+  // ── 서버에서 데이터 다시 불러오기 ──
+  const handleReload = async () => {
+    const [o, i, p, it] = await Promise.all([
+      loadOrders(), loadInventory(), loadPartners(), loadItems()
+    ]);
+    setOrders(o);
+    setInventory(i);
+    setPartners(p);
+    setItems(it);
+    alert(`${o.length}개 주문 데이터를 불러왔어요!`);
   };
 
   const handleAdd = () => {
@@ -304,7 +300,7 @@ export default function Orders() {
           <p className="text-gray-500 text-sm mt-1">총 {orders.length}건의 주문</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowLoadModal(true)}
+          <button onClick={handleReload}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📂 불러오기
@@ -707,75 +703,6 @@ export default function Orders() {
         </div>
       )}
 
-      {/* ── 품목/거래처 불러오기 모달 ── */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 품목/거래처에서 불러오기</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              품목을 선택하면 주문 추가 화면이 자동으로 채워져요
-            </p>
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-              {items.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">등록된 품목이 없어요</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">화주</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목명</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">단가</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">원산지</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">선택</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {items.map(item => {
-                      // 해당 품목과 연결된 거래처 찾기
-                      const relatedPartners = partners.filter(p =>
-                        p.mainItem.includes(item.category) || p.mainItem.includes(item.name)
-                      );
-                      return (
-                        <tr key={item.id} className="hover:bg-blue-50">
-                          <td className="px-3 py-2 font-medium text-gray-800">{item.name}</td>
-                          <td className="px-3 py-2">
-                            <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">{item.category}</span>
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">₩{item.price.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-gray-500">{item.origin}</td>
-                          <td className="px-3 py-2">
-                            {relatedPartners.length > 0 ? (
-                              <div className="flex flex-col gap-1">
-                                {relatedPartners.map(p => (
-                                  <button key={p.id} onClick={() => handleLoadItem(item, p)}
-                                    className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 text-left truncate">
-                                    {p.company} ({p.type})
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <button onClick={() => handleLoadItem(item)}
-                                className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                                선택
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-end mt-4">
-              <button onClick={() => setShowLoadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

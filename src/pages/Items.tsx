@@ -53,6 +53,13 @@ export default function Items() {
   }, []);
 
 
+  // ── 서버에서 데이터 다시 불러오기 ──
+  const handleReload = async () => {
+    const data = await loadItems();
+    setItems(data);
+    alert(`${data.length}개 품목 데이터를 불러왔어요!`);
+  };
+
   const handleAdd = () => {
     setEditingItem(null);
     setFormData(EMPTY_ITEM);
@@ -129,6 +136,11 @@ export default function Items() {
           <p className="text-gray-500 text-sm mt-1">총 {items.length}개의 품목</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={handleReload}
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-orange-600 transition-colors font-medium text-sm">
+            📂 불러오기
+          </button>
           <button onClick={() => exportItems(items)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
