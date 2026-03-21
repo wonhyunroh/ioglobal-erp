@@ -19,8 +19,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  InventoryItem,
-  loadInventory,
+  InventoryItem, Item,
+  loadInventory, loadItems,
   saveInventoryItem,
   updateInventoryItem,
   deleteInventoryItem,
@@ -66,6 +66,9 @@ export default function Inventory() {
   const [searchText, setSearchText] = useState('');
   const [filterCategory, setFilterCategory] = useState('전체');
   const [filterMonth, setFilterMonth] = useState('');
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [masterItems, setMasterItems] = useState<Item[]>([]);
+  const [selectedLoadIds, setSelectedLoadIds] = useState<Set<number>>(new Set());
 
   // ── 앱 시작 시 서버에서 재고 목록 불러오기 ──
   useEffect(() => {
@@ -75,6 +78,33 @@ export default function Inventory() {
     };
     load();
   }, []);
+
+  // ── 품목에서 불러오기: 품목 목록 모달 열기 ──
+  const handleOpenLoad = async () => {
+    const items = await loadItems();
+    setMasterItems(items);
+    setSelectedLoadIds(new Set());
+    setShowLoadModal(true);
+  };
+
+  // ── 선택한 품목을 재고에 추가 ──
+  const handleLoadSelected = async () => {
+    const toLoad = masterItems.filter(i => selectedLoadIds.has(i.id));
+    let count = 0;
+    for (const item of toLoad) {
+      // 이미 재고에 있는 품목은 건너뛰기
+      if (inventory.some(inv => inv.item === item.name)) continue;
+      const created = await saveInventoryItem({
+        item: item.name, category: item.category, unit: item.unit,
+        current: 0, minStock: 0, lastUpdated: today(), memo: '',
+      });
+      setInventory(prev => [...prev, created]);
+      count++;
+    }
+    setShowLoadModal(false);
+    if (count > 0) alert(`${count}개 품목을 재고에 추가했어요!`);
+    else alert('추가할 새 품목이 없어요. (이미 등록된 품목)');
+  };
 
   const handleAdd = () => {
     setEditingItem(null);
@@ -228,6 +258,11 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={handleOpenLoad}
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-orange-600 transition-colors font-medium text-sm">
+            📂 불러오기
+          </button>
           <button onClick={() => exportInventory(inventory)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
@@ -241,15 +276,31 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── 월별 선택 ── */}
+      {/* ── 월별 선택 (한국식) ── */}
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => changeMonth(-1)}
           className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">◀</button>
-        <input type="month" value={filterMonth}
-          onChange={e => setFilterMonth(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm
-                     focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <select value={filterMonth ? filterMonth.split('-')[0] : ''}
+          onChange={e => {
+            if (!e.target.value) { setFilterMonth(''); return; }
+            const m = filterMonth ? filterMonth.split('-')[1] : String(new Date().getMonth()+1).padStart(2,'0');
+            setFilterMonth(`${e.target.value}-${m}`);
+          }}
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+          <option value="">전체</option>
+          {Array.from({length:5}, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+            <option key={y} value={y}>{y}년</option>
+          ))}
+        </select>
+        {filterMonth && (
+          <select value={filterMonth.split('-')[1]}
+            onChange={e => setFilterMonth(`${filterMonth.split('-')[0]}-${e.target.value}`)}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+            {Array.from({length:12}, (_, i) => String(i+1).padStart(2,'0')).map(m => (
+              <option key={m} value={m}>{Number(m)}월</option>
+            ))}
+          </select>
+        )}
         <button onClick={() => changeMonth(1)}
           className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">▶</button>
         {filterMonth && (
@@ -257,11 +308,6 @@ export default function Inventory() {
             className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
             전체 보기
           </button>
-        )}
-        {filterMonth && (
-          <span className="text-sm font-medium text-gray-700">
-            {filterMonth.replace('-', '년 ')}월 업데이트 기준
-          </span>
         )}
       </div>
 
@@ -541,6 +587,82 @@ export default function Inventory() {
                   }`}>
                 {saving ? '처리 중...' : stockForm.type === '입고' ? '입고 처리' : '출고 처리'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 품목에서 불러오기 모달 ── */}
+      {showLoadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] flex flex-col">
+            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 품목에서 불러오기</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              품목 관리에 등록된 항목을 재고에 추가해요. (이미 등록된 품목은 건너뜁니다)
+            </p>
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+              {masterItems.length === 0 ? (
+                <p className="text-center text-gray-400 py-8 text-sm">등록된 품목이 없어요</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left">
+                        <input type="checkbox"
+                          checked={selectedLoadIds.size === masterItems.length}
+                          onChange={e => {
+                            if (e.target.checked) setSelectedLoadIds(new Set(masterItems.map(i => i.id)));
+                            else setSelectedLoadIds(new Set());
+                          }} />
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">화주</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목명</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">단위</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {masterItems.map(item => {
+                      const exists = inventory.some(inv => inv.item === item.name);
+                      return (
+                        <tr key={item.id} className={exists ? 'bg-gray-50 opacity-50' : 'hover:bg-blue-50'}>
+                          <td className="px-3 py-2">
+                            <input type="checkbox" disabled={exists}
+                              checked={selectedLoadIds.has(item.id)}
+                              onChange={e => {
+                                const next = new Set(selectedLoadIds);
+                                if (e.target.checked) next.add(item.id);
+                                else next.delete(item.id);
+                                setSelectedLoadIds(next);
+                              }} />
+                          </td>
+                          <td className="px-3 py-2 text-gray-800">{item.name}</td>
+                          <td className="px-3 py-2">
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">{item.category}</span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{item.unit}</td>
+                          <td className="px-3 py-2 text-xs">
+                            {exists ? <span className="text-gray-400">등록됨</span> : <span className="text-blue-600">추가 가능</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="flex justify-between items-center mt-4">
+              <span className="text-xs text-gray-500">{selectedLoadIds.size}개 선택</span>
+              <div className="flex gap-3">
+                <button onClick={() => setShowLoadModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  취소
+                </button>
+                <button onClick={handleLoadSelected} disabled={selectedLoadIds.size === 0}
+                  className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50">
+                  불러오기
+                </button>
+              </div>
             </div>
           </div>
         </div>
