@@ -613,43 +613,30 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* 거래처 (타이핑 + 자동완성) */}
+              {/* 거래처 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   거래처 <span className="text-red-500">*</span>
                 </label>
-                <input type="text" name="partner" list="partner-list"
+                <input type="text" name="partner"
                   value={formData.partner} onChange={handleChange}
-                  placeholder="거래처명 입력 (자동완성)"
+                  placeholder="거래처명 입력"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <datalist id="partner-list">
-                  {usedPartners.map(p => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
               </div>
 
-              {/* 품목 (타이핑 + 자동완성) */}
+              {/* 품목 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   품목 <span className="text-red-500">*</span>
-                  <span className="text-xs text-blue-500 ml-2">
-                    (품목 관리에 등록된 품목 선택 시 기준단가 자동입력)
-                  </span>
                 </label>
-                <input type="text" name="item" list="item-list"
+                <input type="text" name="item"
                   value={formData.item} onChange={handleChange}
                   placeholder="예: 옥수수, 대두박"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
                              text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <datalist id="item-list">
-                  {usedItems.map(i => (
-                    <option key={i} value={i} />
-                  ))}
-                </datalist>
               </div>
 
               {/* 수량 + 단가 */}
