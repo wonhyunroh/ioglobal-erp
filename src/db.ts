@@ -107,7 +107,7 @@ export type Order = {
   total: number;
   orderDate: string;
   dueDate: string;
-  type: '매입' | '매출';
+  type: '매입' | '매출' | '예상 매입' | '예상 매출';
   status: string;
   memo: string;
 };

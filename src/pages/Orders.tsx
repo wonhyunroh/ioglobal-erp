@@ -16,6 +16,8 @@ const ORDER_STATUSES = [
   '견적', '계약', '입고', '입고완료', '출고', '출고완료', '정산완료'
 ];
 
+const ORDER_TYPES = ['매입', '매출', '예상 매입', '예상 매출'];
+
 const STATUS_COLORS: Record<string, string> = {
   '견적':    'bg-gray-100 text-gray-600',
   '계약':    'bg-blue-100 text-blue-700',
@@ -24,6 +26,13 @@ const STATUS_COLORS: Record<string, string> = {
   '출고':    'bg-yellow-100 text-yellow-700',
   '출고완료': 'bg-orange-100 text-orange-700',
   '정산완료': 'bg-green-100 text-green-700',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  '매입':    'bg-blue-100 text-blue-700',
+  '매출':    'bg-green-100 text-green-700',
+  '예상 매입': 'bg-purple-100 text-purple-700',
+  '예상 매출': 'bg-orange-100 text-orange-700',
 };
 
 const TABLE_HEADERS = [
@@ -39,7 +48,7 @@ const today = () => {
 const generateOrderNo = (count: number) => {
   const year = new Date().getFullYear();
   const seq = String(count + 1).padStart(3, '0');
-  return `ORD-${year}-${seq}`;
+  return `IO-${year}-${seq}`;
 };
 
 const EMPTY_ORDER: Omit<Order, 'id' | 'total'> = {
@@ -63,6 +72,7 @@ export default function Orders() {
   const [filterType, setFilterType]     = useState('전체');
   const [searchText, setSearchText]     = useState('');
   const [filterMonth, setFilterMonth]   = useState('');
+  const [filterDay, setFilterDay]       = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -76,6 +86,18 @@ export default function Orders() {
     };
     load();
   }, []);
+
+  // 거래처 자동완성 목록 (기존 입력값 + 거래처 관리 데이터)
+  const usedPartners = [...new Set([
+    ...orders.map(o => o.partner).filter(Boolean),
+    ...partners.map(p => p.company),
+  ])].sort();
+
+  // 품목 자동완성 목록 (품목 관리에서 가져옴)
+  const usedItems = [...new Set([
+    ...items.map(i => i.name).filter(Boolean),
+    ...orders.map(o => o.item).filter(Boolean),
+  ])].sort();
 
   const syncInventory = async (
     itemName: string,
@@ -181,12 +203,15 @@ export default function Orders() {
     if (!formData.item.trim())    { alert('품목을 입력해주세요!'); return; }
     if (formData.quantity <= 0)   { alert('수량은 0보다 커야 해요!'); return; }
 
-    const isBuyingComplete =
+    // 예상 매입/매출은 재고 연동 안 함
+    const isActualType = formData.type === '매입' || formData.type === '매출';
+
+    const isBuyingComplete = isActualType &&
       formData.type === '매입' &&
       editingOrder?.status !== '입고완료' &&
       formData.status === '입고완료';
 
-    const isSellingComplete =
+    const isSellingComplete = isActualType &&
       formData.type === '매출' &&
       editingOrder?.status !== '출고완료' &&
       formData.status === '출고완료';
@@ -233,28 +258,22 @@ export default function Orders() {
     }
   };
 
-  // 거래처 필터 (주문 유형에 따라)
-  const filteredPartners = partners.filter(p =>
-    formData.type === '매입' ? p.type === '매입처' : p.type === '매출처'
-  );
-
-  // 월 필터 적용된 주문 목록
-  const monthOrders = filterMonth
-    ? orders.filter(o => o.orderDate.startsWith(filterMonth))
+  // 날짜 필터 적용된 주문 목록
+  const dateFilterPrefix = filterDay && filterMonth
+    ? `${filterMonth}-${filterDay}`
+    : filterMonth || '';
+  const monthOrders = dateFilterPrefix
+    ? orders.filter(o => o.orderDate.startsWith(dateFilterPrefix))
     : orders;
 
-  // 예상 매출 vs 출고 매출 (월 필터 적용)
-  const expectedSales = monthOrders
-    .filter(o => o.type === '매출' && !['출고완료', '정산완료'].includes(o.status))
-    .reduce((sum, o) => sum + o.total, 0);
-  const actualSales = monthOrders
-    .filter(o => o.type === '매출' && ['출고완료', '정산완료'].includes(o.status))
-    .reduce((sum, o) => sum + o.total, 0);
+  // 4가지 유형별 합계 (월/일 필터 적용)
+  const totalByType = (type: string) =>
+    monthOrders.filter(o => o.type === type).reduce((sum, o) => sum + o.total, 0);
 
-  // 매입 합계 (월 필터 적용)
-  const monthlyPurchase = monthOrders
-    .filter(o => o.type === '매입')
-    .reduce((sum, o) => sum + o.total, 0);
+  const expectedSales    = totalByType('예상 매출');
+  const actualSales      = totalByType('매출');
+  const expectedPurchase = totalByType('예상 매입');
+  const actualPurchase   = totalByType('매입');
 
   const filteredOrders = monthOrders.filter(o => {
     const matchStatus = filterStatus === '전체' || o.status === filterStatus;
@@ -268,8 +287,17 @@ export default function Orders() {
     return matchStatus && matchType && matchSearch;
   });
 
+  // 상태 필터 선택 시 하위 요약 계산
+  const statusSummary = filterStatus !== '전체' ? {
+    expectedSales:    filteredOrders.filter(o => o.type === '예상 매출').reduce((s, o) => s + o.total, 0),
+    actualSales:      filteredOrders.filter(o => o.type === '매출').reduce((s, o) => s + o.total, 0),
+    expectedPurchase: filteredOrders.filter(o => o.type === '예상 매입').reduce((s, o) => s + o.total, 0),
+    actualPurchase:   filteredOrders.filter(o => o.type === '매입').reduce((s, o) => s + o.total, 0),
+  } : null;
+
   // 월 이동 헬퍼
   const changeMonth = (dir: number) => {
+    setFilterDay('');
     if (!filterMonth) {
       const d = new Date();
       setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
@@ -279,6 +307,15 @@ export default function Orders() {
     const d = new Date(y, m - 1 + dir, 1);
     setFilterMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   };
+
+  // 선택된 월의 일수 계산
+  const daysInMonth = filterMonth
+    ? new Date(
+        Number(filterMonth.split('-')[0]),
+        Number(filterMonth.split('-')[1]),
+        0
+      ).getDate()
+    : 31;
 
   return (
     <div>
@@ -307,15 +344,16 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* ── 월별 선택 (한국식) ── */}
+      {/* ── 날짜 선택 (연/월/일) ── */}
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => changeMonth(-1)}
           className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">◀</button>
         <select value={filterMonth ? filterMonth.split('-')[0] : ''}
           onChange={e => {
-            if (!e.target.value) { setFilterMonth(''); return; }
+            if (!e.target.value) { setFilterMonth(''); setFilterDay(''); return; }
             const m = filterMonth ? filterMonth.split('-')[1] : String(new Date().getMonth()+1).padStart(2,'0');
             setFilterMonth(`${e.target.value}-${m}`);
+            setFilterDay('');
           }}
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           <option value="">전체</option>
@@ -325,41 +363,57 @@ export default function Orders() {
         </select>
         {filterMonth && (
           <select value={filterMonth.split('-')[1]}
-            onChange={e => setFilterMonth(`${filterMonth.split('-')[0]}-${e.target.value}`)}
+            onChange={e => { setFilterMonth(`${filterMonth.split('-')[0]}-${e.target.value}`); setFilterDay(''); }}
             className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
             {Array.from({length:12}, (_, i) => String(i+1).padStart(2,'0')).map(m => (
               <option key={m} value={m}>{Number(m)}월</option>
             ))}
           </select>
         )}
+        {filterMonth && (
+          <select value={filterDay}
+            onChange={e => setFilterDay(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+            <option value="">전체 일</option>
+            {Array.from({length: daysInMonth}, (_, i) => String(i+1).padStart(2,'0')).map(d => (
+              <option key={d} value={d}>{Number(d)}일</option>
+            ))}
+          </select>
+        )}
         <button onClick={() => changeMonth(1)}
           className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">▶</button>
         {filterMonth && (
-          <button onClick={() => setFilterMonth('')}
+          <button onClick={() => { setFilterMonth(''); setFilterDay(''); }}
             className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
             전체 보기
           </button>
         )}
       </div>
 
-      {/* ── 매출/매입 요약 ── */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <p className="text-xs text-blue-600 font-medium mb-1">예상 매출 (출고 전)</p>
-          <p className="text-base font-bold text-blue-800">
+      {/* ── 매출/매입 요약 (4가지 유형) ── */}
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-orange-600 font-medium mb-1">예상 매출</p>
+          <p className="text-base font-bold text-orange-800">
             ₩{expectedSales.toLocaleString()}
           </p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <p className="text-xs text-green-600 font-medium mb-1">출고 매출 (출고완료)</p>
+          <p className="text-xs text-green-600 font-medium mb-1">출고(출고 + 작업비)</p>
           <p className="text-base font-bold text-green-800">
             ₩{actualSales.toLocaleString()}
           </p>
         </div>
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
-          <p className="text-xs text-indigo-600 font-medium mb-1">매입 합계</p>
-          <p className="text-base font-bold text-indigo-800">
-            ₩{monthlyPurchase.toLocaleString()}
+        <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-purple-600 font-medium mb-1">예상 매입</p>
+          <p className="text-base font-bold text-purple-800">
+            ₩{expectedPurchase.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <p className="text-xs text-blue-600 font-medium mb-1">매입 합계</p>
+          <p className="text-base font-bold text-blue-800">
+            ₩{actualPurchase.toLocaleString()}
           </p>
         </div>
       </div>
@@ -378,8 +432,9 @@ export default function Orders() {
 
       {/* ── 필터 영역 ── */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
+        {/* 유형 필터 */}
         <div className="flex gap-2">
-          {['전체', '매입', '매출'].map(type => (
+          {['전체', ...ORDER_TYPES].map(type => (
             <button key={type} onClick={() => setFilterType(type)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
                 ${filterType === type
@@ -390,7 +445,8 @@ export default function Orders() {
             </button>
           ))}
         </div>
-        <div className="w-px bg-gray-200" />
+        <div className="w-px bg-gray-200 h-6" />
+        {/* 상태 필터 */}
         <div className="flex gap-2 flex-wrap">
           {['전체', ...ORDER_STATUSES].map(status => (
             <button key={status} onClick={() => setFilterStatus(status)}
@@ -409,6 +465,28 @@ export default function Orders() {
           </span>
         )}
       </div>
+
+      {/* ── 상태 필터 선택 시 하위 요약 ── */}
+      {statusSummary && (
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-orange-600 font-medium">예상 매출</p>
+            <p className="text-sm font-bold text-orange-800">₩{statusSummary.expectedSales.toLocaleString()}</p>
+          </div>
+          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-green-600 font-medium">출고(출고+작업비)</p>
+            <p className="text-sm font-bold text-green-800">₩{statusSummary.actualSales.toLocaleString()}</p>
+          </div>
+          <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-purple-600 font-medium">예상 매입</p>
+            <p className="text-sm font-bold text-purple-800">₩{statusSummary.expectedPurchase.toLocaleString()}</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-blue-600 font-medium">매입 합계</p>
+            <p className="text-sm font-bold text-blue-800">₩{statusSummary.actualPurchase.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
 
       {/* ── 주문 목록 테이블 ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
@@ -442,7 +520,7 @@ export default function Orders() {
                   <td className="px-3 py-2 text-gray-600">{order.blNo || '-'}</td>
                   <td className="px-3 py-2 font-medium text-gray-800">{order.partner}</td>
                   <td className="px-3 py-2 text-gray-600">{order.item}</td>
-                  <td className="px-3 py-2 text-gray-600">{order.quantity.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-gray-600">{order.quantity.toLocaleString()} kg</td>
                   <td className="px-3 py-2 text-gray-600">₩{order.price.toLocaleString()}</td>
                   <td className="px-3 py-2 font-medium text-gray-800">
                     ₩{order.total.toLocaleString()}
@@ -451,10 +529,7 @@ export default function Orders() {
                   <td className="px-3 py-2 text-gray-500">{order.dueDate}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                      ${order.type === '매입'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-green-100 text-green-700'
-                      }`}>
+                      ${TYPE_COLORS[order.type] || 'bg-gray-100 text-gray-600'}`}>
                       {order.type}
                     </span>
                   </td>
@@ -498,6 +573,7 @@ export default function Orders() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">주문번호</label>
                   <input type="text" name="orderNo"
                     value={formData.orderNo} onChange={handleChange}
+                    placeholder="IO-2026-001"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -507,8 +583,9 @@ export default function Orders() {
                   <select name="type" value={formData.type} onChange={handleChange}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="매입">매입</option>
-                    <option value="매출">매출</option>
+                    {ORDER_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -535,54 +612,53 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* 거래처 */}
+              {/* 거래처 (타이핑 + 자동완성) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   거래처 <span className="text-red-500">*</span>
                 </label>
-                <select name="partner" value={formData.partner} onChange={handleChange}
+                <input type="text" name="partner" list="partner-list"
+                  value={formData.partner} onChange={handleChange}
+                  placeholder="거래처명 입력 (자동완성)"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
-                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">-- 거래처 선택 --</option>
-                  {filteredPartners.map(p => (
-                    <option key={p.id} value={p.company}>{p.company}</option>
+                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <datalist id="partner-list">
+                  {usedPartners.map(p => (
+                    <option key={p} value={p} />
                   ))}
-                  {/* 기존 데이터 호환: 목록에 없는 거래처도 표시 */}
-                  {formData.partner && !filteredPartners.find(p => p.company === formData.partner) && (
-                    <option value={formData.partner}>{formData.partner}</option>
-                  )}
-                </select>
+                </datalist>
               </div>
 
-              {/* 품목 */}
+              {/* 품목 (타이핑 + 자동완성) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   품목 <span className="text-red-500">*</span>
                   <span className="text-xs text-blue-500 ml-2">
-                    (선택 시 기준단가 자동입력)
+                    (품목 관리에 등록된 품목 선택 시 기준단가 자동입력)
                   </span>
                 </label>
-                <select name="item" value={formData.item} onChange={handleChange}
+                <input type="text" name="item" list="item-list"
+                  value={formData.item} onChange={handleChange}
+                  placeholder="예: 옥수수, 대두박"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2
-                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">-- 품목 선택 --</option>
-                  {items.map(i => (
-                    <option key={i.id} value={i.name}>{i.name}</option>
+                             text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <datalist id="item-list">
+                  {usedItems.map(i => (
+                    <option key={i} value={i} />
                   ))}
-                  {formData.item && !items.find(i => i.name === formData.item) && (
-                    <option value={formData.item}>{formData.item}</option>
-                  )}
-                </select>
+                </datalist>
               </div>
 
               {/* 수량 + 단가 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">수량</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">수량 (kg)</label>
                   <input type="number" name="quantity"
                     value={formData.quantity || ''} onChange={handleChange}
                     min="0" step="any"
-                    placeholder="예: 30000.5"
+                    placeholder="예: 30000"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
