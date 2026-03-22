@@ -161,10 +161,7 @@ export default function CostCalc({ currentUser }: Props) {
   const [showRates, setShowRates]       = useState(false);
   const [editingFixed, setEditingFixed] = useState(false);
   const [editingRates, setEditingRates] = useState(false);
-  const [rateLoading, setRateLoading]   = useState(false);
-  const [rateUpdatedAt, setRateUpdatedAt] = useState('');
   const [saving, setSaving] = useState(false);
-  const [exchangePlusOne, setExchangePlusOne] = useState(true); // 환율 +1원 적용
   // ── 저장/불러오기 ──
   const [savedCalcs, setSavedCalcs]   = useState<CostCalcRecord[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -188,7 +185,6 @@ export default function CostCalc({ currentUser }: Props) {
       setSavedCalcs(calcs);
     };
     load();
-    fetchExchangeRate();
   }, []);
 
   // ── 고정비용 { key → amount } 맵 ──
@@ -202,27 +198,6 @@ export default function CostCalc({ currentUser }: Props) {
     acc[r.key] = r.value;
     return acc;
   }, {} as Record<string, number>);
-
-  // ── 실시간 환율 불러오기 ──
-  const fetchExchangeRate = async () => {
-    setRateLoading(true);
-    try {
-      const res  = await fetch('https://open.er-api.com/v6/latest/USD');
-      const data = await res.json();
-      if (data.result === 'success') {
-        const rawRate = Math.round(data.rates.KRW * 100) / 100;
-        setCore(prev => ({
-          ...prev,
-          exchangeRate: exchangePlusOne ? rawRate + 1 : rawRate,
-        }));
-        setRateUpdatedAt(new Date().toLocaleTimeString('ko-KR'));
-      }
-    } catch (err) {
-      console.error('환율 불러오기 실패:', err);
-    } finally {
-      setRateLoading(false);
-    }
-  };
 
   const handleCoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -457,46 +432,21 @@ export default function CostCalc({ currentUser }: Props) {
                 </div>
               ))}
 
-              {/* 환율 */}
+              {/* 환율 (사용자 직접 입력) */}
               <div className="flex items-center justify-between">
                 <label className="text-sm text-gray-600 w-40">
                   환율
                   <span className="text-xs text-gray-400 ml-1">(원/달러)</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <input type="number" name="exchangeRate"
-                    value={core.exchangeRate || ''}
-                    onChange={handleCoreChange} step="0.01"
-                    className="w-28 border border-gray-300 rounded-lg px-3 py-1.5
-                               text-sm text-right focus:outline-none focus:ring-2
-                               focus:ring-blue-500"
-                  />
-                  <button onClick={fetchExchangeRate} disabled={rateLoading}
-                    title="실시간 환율 불러오기"
-                    className="text-blue-500 hover:text-blue-700
-                               disabled:text-gray-300 transition-colors text-lg">
-                    {rateLoading ? '⏳' : '🔄'}
-                  </button>
-                </div>
+                <input type="number" name="exchangeRate"
+                  value={core.exchangeRate || ''}
+                  onChange={handleCoreChange} step="0.01"
+                  placeholder="예: 1450"
+                  className="w-28 border border-gray-300 rounded-lg px-3 py-1.5
+                             text-sm text-right focus:outline-none focus:ring-2
+                             focus:ring-blue-500"
+                />
               </div>
-              {/* 환율 +1원 적용 토글 */}
-              <div className="flex items-center justify-end gap-2 mt-1">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox"
-                    checked={exchangePlusOne}
-                    onChange={e => setExchangePlusOne(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600
-                               focus:ring-blue-500"
-                  />
-                  <span className="text-xs text-gray-500">환율 +1원 적용</span>
-                </label>
-              </div>
-              {rateUpdatedAt && (
-                <div className="text-xs text-green-600 text-right">
-                  ✅ 환율 업데이트: {rateUpdatedAt}
-                  {exchangePlusOne && ' (+1원)'}
-                </div>
-              )}
             </div>
           </div>
 
