@@ -16,15 +16,12 @@ import React, { useState, useEffect } from 'react';
 import { Item, loadItems, saveItem, updateItem, deleteItem } from '../db';
 import { exportItems } from '../excel';
 
-const CATEGORIES = [
-  '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
-];
 const UNITS = ['t', 'kg', 'mt'];
 const TABLE_HEADERS = [
   'No', '화주', '품목명', '단위', '기준단가', '원산지', '메모', '관리'
 ];
 const EMPTY_ITEM: Omit<Item, 'id'> = {
-  name: '', category: '옥수수', unit: 't',
+  name: '', category: '', unit: 't',
   price: 0, origin: '', memo: '',
 };
 
@@ -35,7 +32,6 @@ export default function Items() {
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(EMPTY_ITEM);
   const [searchText, setSearchText] = useState('');
-  const [filterCategory, setFilterCategory] = useState('전체');
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [loadSearchText, setLoadSearchText] = useState('');
   // ── 앱 시작 시 저장된 품목 불러오기 ──
@@ -125,14 +121,16 @@ export default function Items() {
     }));
   };
 
+  // ── 이전에 입력한 품목명 목록 (자동완성용) ──
+  const usedCategories = [...new Set(items.map(i => i.category).filter(Boolean))];
+
   // ── 필터링된 품목 목록 ──
   const filteredItems = items.filter(item => {
-    const matchCategory = filterCategory === '전체' || item.category === filterCategory;
-    const matchSearch = !searchText ||
-      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchText.toLowerCase()) ||
-      item.origin.toLowerCase().includes(searchText.toLowerCase());
-    return matchCategory && matchSearch;
+    if (!searchText) return true;
+    const q = searchText.toLowerCase();
+    return item.name.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      item.origin.toLowerCase().includes(q);
   });
 
   return (
@@ -161,29 +159,17 @@ export default function Items() {
         </div>
       </div>
 
-      {/* ── 검색 + 필터 ── */}
-      <div className="flex gap-3 mb-4 items-center flex-wrap">
+      {/* ── 검색 ── */}
+      <div className="flex gap-3 mb-4 items-center">
         <input
           type="text"
           value={searchText}
           onChange={e => setSearchText(e.target.value)}
           placeholder="🔍 화주, 품목명, 원산지 검색..."
-          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2
+          className="flex-1 border border-gray-300 rounded-lg px-4 py-2
                      text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <div className="flex gap-1 flex-wrap">
-          {['전체', ...CATEGORIES].map(cat => (
-            <button key={cat} onClick={() => setFilterCategory(cat)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors
-                ${filterCategory === cat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}>
-              {cat}
-            </button>
-          ))}
-        </div>
-        {(searchText || filterCategory !== '전체') && (
+        {searchText && (
           <span className="text-xs text-gray-500">
             검색결과: {filteredItems.length}건
           </span>
@@ -272,12 +258,16 @@ export default function Items() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     품목명
                   </label>
-                  <select name="category" value={formData.category}
-                    onChange={handleChange}
+                  <input type="text" name="category"
+                    value={formData.category} onChange={handleChange}
+                    list="category-list"
+                    placeholder="예: 옥수수, 대두박"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
-                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <datalist id="category-list">
+                    {usedCategories.map(c => <option key={c} value={c} />)}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -295,9 +285,9 @@ export default function Items() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     기준 단가 (원)
                   </label>
-                  <input type="number" name="price"
+                  <input type="text" inputMode="numeric" name="price"
                     value={formData.price || ''}
-                    onChange={handleChange} min="0" step="any"
+                    onChange={handleChange}
                     placeholder="예: 150000"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
                                text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
