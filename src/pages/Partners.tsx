@@ -58,8 +58,6 @@ export default function Partners() {
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('전체');
   const [filterMonth, setFilterMonth] = useState('');
-  const [showLoadModal, setShowLoadModal] = useState(false);
-  const [loadSearchText, setLoadSearchText] = useState('');
 
   // ── 앱 시작 시 저장된 거래처 불러오기 ──
   useEffect(() => {
@@ -69,29 +67,6 @@ export default function Partners() {
     };
     load();
   }, []);
-
-
-  // ── 불러오기: 저장된 데이터 검색 후 선택 → 수정 폼 ──
-  const handleOpenLoad = async () => {
-    const data = await loadPartners();
-    setPartners(data);
-    setLoadSearchText('');
-    setShowLoadModal(true);
-  };
-
-  const handleLoadSelect = (partner: Partner) => {
-    setShowLoadModal(false);
-    handleEdit(partner);
-  };
-
-  const loadFiltered = partners.filter(p => {
-    if (!loadSearchText) return true;
-    const q = loadSearchText.toLowerCase();
-    return p.company.toLowerCase().includes(q) ||
-      p.contact.toLowerCase().includes(q) ||
-      p.mainItem.toLowerCase().includes(q) ||
-      p.country.toLowerCase().includes(q);
-  });
 
   const handleAdd = () => {
     setEditingPartner(null);
@@ -189,11 +164,6 @@ export default function Partners() {
         </div>
         
         <div className="flex gap-2">
-          <button onClick={handleOpenLoad}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg
-                       hover:bg-orange-600 transition-colors font-medium text-sm">
-            📂 불러오기
-          </button>
           <button
             onClick={() => exportPartners(partners)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
@@ -464,66 +434,6 @@ export default function Partners() {
         </div>
       )}
 
-      {/* ── 불러오기 모달: 저장된 거래처 검색 ── */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 저장된 거래처 불러오기</h3>
-            <p className="text-xs text-gray-500 mb-3">검색 후 선택하면 수정 화면이 열려요</p>
-            <input
-              type="text"
-              value={loadSearchText}
-              onChange={e => setLoadSearchText(e.target.value)}
-              placeholder="🔍 회사명, 담당자, 품목, 국가 검색..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3
-                         focus:outline-none focus:ring-2 focus:ring-orange-500"
-              autoFocus
-            />
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-              {loadFiltered.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">검색 결과가 없어요</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">회사명</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">담당자</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">국가</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">유형</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">주요품목</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {loadFiltered.map(partner => (
-                      <tr key={partner.id}
-                        onClick={() => handleLoadSelect(partner)}
-                        className="hover:bg-orange-50 cursor-pointer transition-colors">
-                        <td className="px-3 py-2 font-medium text-gray-800">{partner.company}</td>
-                        <td className="px-3 py-2 text-gray-600">{partner.contact}</td>
-                        <td className="px-3 py-2 text-gray-600">{partner.country}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                            ${partner.type === '매입처' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                            {partner.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-500">{partner.mainItem}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-between items-center mt-4">
-              <span className="text-xs text-gray-400">{loadFiltered.length}건</span>
-              <button onClick={() => setShowLoadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

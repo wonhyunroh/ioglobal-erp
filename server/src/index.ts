@@ -185,6 +185,9 @@ db.exec(`
 // ── items 테이블 컬럼 마이그레이션 ──
 try { db.exec(`ALTER TABLE items ADD COLUMN price REAL NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE items ADD COLUMN deliveryType TEXT NOT NULL DEFAULT '상차도'`); } catch {}
+try { db.exec(`ALTER TABLE items ADD COLUMN packType TEXT NOT NULL DEFAULT '벌크'`); } catch {}
+try { db.exec(`ALTER TABLE items ADD COLUMN priceDate TEXT NOT NULL DEFAULT ''`); } catch {}
 
 // ── orders 테이블 컬럼 마이그레이션 ──
 try { db.exec(`ALTER TABLE orders ADD COLUMN contractNo TEXT NOT NULL DEFAULT ''`); } catch {}

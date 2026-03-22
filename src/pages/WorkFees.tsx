@@ -36,8 +36,6 @@ export default function WorkFees() {
   const [filterMonth, setFilterMonth] = useState(today());
   const [filterLocation, setFilterLocation] = useState('전체');
   const [searchText, setSearchText] = useState('');
-  const [showLoadModal, setShowLoadModal] = useState(false);
-  const [loadSearchText, setLoadSearchText] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -46,28 +44,6 @@ export default function WorkFees() {
     };
     load();
   }, []);
-
-  // ── 불러오기: 저장된 데이터 검색 후 선택 → 수정 폼 ──
-  const handleOpenLoad = async () => {
-    const data = await loadWorkFees();
-    setFees(data);
-    setLoadSearchText('');
-    setShowLoadModal(true);
-  };
-
-  const handleLoadSelect = (fee: WorkFee) => {
-    setShowLoadModal(false);
-    handleEdit(fee);
-  };
-
-  const loadFiltered = fees.filter(f => {
-    if (!loadSearchText) return true;
-    const q = loadSearchText.toLowerCase();
-    return f.partner.toLowerCase().includes(q) ||
-      f.item.toLowerCase().includes(q) ||
-      f.location.toLowerCase().includes(q) ||
-      f.yearMonth.includes(q);
-  });
 
   const handleAdd = () => {
     setEditingFee(null);
@@ -287,11 +263,6 @@ export default function WorkFees() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleOpenLoad}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg
-                       hover:bg-orange-600 transition-colors font-medium text-sm">
-            📂 불러오기
-          </button>
           <button onClick={() => document.getElementById('excel-import')?.click()}
             className="bg-cyan-500 text-white px-4 py-2 rounded-lg
                        hover:bg-cyan-600 transition-colors font-medium text-sm">
@@ -636,70 +607,6 @@ export default function WorkFees() {
         </div>
       )}
 
-      {/* ── 불러오기 모달: 저장된 작업비 검색 ── */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 저장된 작업비 불러오기</h3>
-            <p className="text-xs text-gray-500 mb-3">검색 후 선택하면 수정 화면이 열려요</p>
-            <input
-              type="text"
-              value={loadSearchText}
-              onChange={e => setLoadSearchText(e.target.value)}
-              placeholder="🔍 거래처, 품목, 지역, 년월 검색..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3
-                         focus:outline-none focus:ring-2 focus:ring-orange-500"
-              autoFocus
-            />
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-              {loadFiltered.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">검색 결과가 없어요</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">년월</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">지역</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">거래처</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">매출액</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">매입액</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {loadFiltered.map(fee => (
-                      <tr key={fee.id}
-                        onClick={() => handleLoadSelect(fee)}
-                        className="hover:bg-orange-50 cursor-pointer transition-colors">
-                        <td className="px-3 py-2 text-gray-600">{fee.yearMonth}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                            ${fee.location === '광양' ? 'bg-indigo-100 text-indigo-700'
-                              : fee.location === '녹산' ? 'bg-teal-100 text-teal-700'
-                              : 'bg-amber-100 text-amber-700'}`}>
-                            {fee.location}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-gray-800">{fee.partner}</td>
-                        <td className="px-3 py-2 text-gray-600">{fee.item}</td>
-                        <td className="px-3 py-2 text-right text-blue-700">₩{fee.salesAmount.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right text-red-700">₩{fee.purchaseAmount.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-between items-center mt-4">
-              <span className="text-xs text-gray-400">{loadFiltered.length}건</span>
-              <button onClick={() => setShowLoadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

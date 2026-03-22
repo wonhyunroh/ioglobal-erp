@@ -152,6 +152,9 @@ export function startServer(): void {
     // ── 컬럼 마이그레이션 (기존 DB 대응) ──
     try { db.exec(`ALTER TABLE items ADD COLUMN price REAL NOT NULL DEFAULT 0`); } catch {}
     try { db.exec(`ALTER TABLE items ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); } catch {}
+    try { db.exec(`ALTER TABLE items ADD COLUMN deliveryType TEXT NOT NULL DEFAULT '상차도'`); } catch {}
+    try { db.exec(`ALTER TABLE items ADD COLUMN packType TEXT NOT NULL DEFAULT '벌크'`); } catch {}
+    try { db.exec(`ALTER TABLE items ADD COLUMN priceDate TEXT NOT NULL DEFAULT ''`); } catch {}
 
     // ── 기본 관리자 계정 생성 ──
     const adminExists = db.prepare(`SELECT id FROM users WHERE username = 'admin'`).get();

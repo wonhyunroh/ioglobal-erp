@@ -89,6 +89,9 @@ export type Item = {
   price: number;
   origin: string;
   memo: string;
+  deliveryType: string;  // 상차도 / 도착도
+  packType: string;      // 벌크 / 톤백
+  priceDate: string;     // 단가 변동일 (YYYY-MM-DD)
 };
 
 // 주문

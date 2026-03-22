@@ -27,9 +27,6 @@ import {
 } from '../db';
 import { exportInventory } from '../excel';
 
-const CATEGORIES = [
-  '옥수수', '대두박', '소맥피', '면실박', '채종박', '주정박', '당밀', '기타'
-];
 const UNITS = ['t', 'kg', 'mt'];
 const TABLE_HEADERS = [
   'No', '품목명', '화주', '단위', '현재재고', '최소재고', '상태', '최근업데이트', '관리'
@@ -40,7 +37,7 @@ const today = () => {
 };
 
 const EMPTY_ITEM: Omit<InventoryItem, 'id'> = {
-  item: '', category: '옥수수', unit: 't',
+  item: '', category: '', unit: 't',
   current: 0, minStock: 0,
   lastUpdated: today(), memo: '',
 };
@@ -64,10 +61,7 @@ export default function Inventory() {
   });
   const [saving, setSaving] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [filterCategory, setFilterCategory] = useState('전체');
   const [filterMonth, setFilterMonth] = useState('');
-  const [showLoadModal, setShowLoadModal] = useState(false);
-  const [loadSearchText, setLoadSearchText] = useState('');
 
   // ── 앱 시작 시 서버에서 재고 목록 불러오기 ──
   useEffect(() => {
@@ -77,26 +71,6 @@ export default function Inventory() {
     };
     load();
   }, []);
-
-  // ── 불러오기: 저장된 데이터 검색 후 선택 → 수정 폼 ──
-  const handleOpenLoad = async () => {
-    const data = await loadInventory();
-    setInventory(data);
-    setLoadSearchText('');
-    setShowLoadModal(true);
-  };
-
-  const handleLoadSelect = (item: InventoryItem) => {
-    setShowLoadModal(false);
-    handleEdit(item);
-  };
-
-  const loadFiltered = inventory.filter(item => {
-    if (!loadSearchText) return true;
-    const q = loadSearchText.toLowerCase();
-    return item.item.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q);
-  });
 
   const handleAdd = () => {
     setEditingItem(null);
@@ -215,12 +189,11 @@ export default function Inventory() {
 
   // ── 필터링된 재고 목록 ──
   const filteredInventory = inventory.filter(item => {
-    const matchCategory = filterCategory === '전체' || item.category === filterCategory;
     const matchSearch = !searchText ||
       item.item.toLowerCase().includes(searchText.toLowerCase()) ||
       item.category.toLowerCase().includes(searchText.toLowerCase());
     const matchMonth = !filterMonth || (item.lastUpdated || '').startsWith(filterMonth);
-    return matchCategory && matchSearch && matchMonth;
+    return matchSearch && matchMonth;
   });
 
   // 월 이동 헬퍼
@@ -250,11 +223,6 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleOpenLoad}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg
-                       hover:bg-orange-600 transition-colors font-medium text-sm">
-            📂 불러오기
-          </button>
           <button onClick={() => exportInventory(inventory)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg
                        hover:bg-green-700 transition-colors font-medium text-sm">
@@ -263,7 +231,7 @@ export default function Inventory() {
           <button onClick={handleAdd}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg
                        hover:bg-blue-700 transition-colors font-medium text-sm">
-            + 품목 추가
+            + 재고 항목 추가
           </button>
         </div>
       </div>
@@ -303,29 +271,17 @@ export default function Inventory() {
         )}
       </div>
 
-      {/* ── 검색 + 필터 ── */}
-      <div className="flex gap-3 mb-4 items-center flex-wrap">
+      {/* ── 검색 ── */}
+      <div className="flex gap-3 mb-4 items-center">
         <input
           type="text"
           value={searchText}
           onChange={e => setSearchText(e.target.value)}
-          placeholder="🔍 품목명 검색..."
+          placeholder="🔍 품목명, 화주 검색..."
           className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2
                      text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <div className="flex gap-1 flex-wrap">
-          {['전체', ...CATEGORIES].map(cat => (
-            <button key={cat} onClick={() => setFilterCategory(cat)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors
-                ${filterCategory === cat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}>
-              {cat}
-            </button>
-          ))}
-        </div>
-        {(searchText || filterCategory !== '전체') && (
+        {searchText && (
           <span className="text-xs text-gray-500">
             검색결과: {filteredInventory.length}건
           </span>
@@ -352,7 +308,7 @@ export default function Inventory() {
                     className="text-center py-16 text-gray-400">
                   <div className="text-4xl mb-3">📦</div>
                   <p className="text-sm">등록된 재고가 없어요</p>
-                  <p className="text-xs mt-1">"품목 추가" 버튼을 눌러 추가해주세요</p>
+                  <p className="text-xs mt-1">"재고 항목 추가" 버튼을 눌러 추가해주세요</p>
                 </td>
               </tr>
             ) : (
@@ -438,14 +394,14 @@ export default function Inventory() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    카테고리
+                    품목명
                   </label>
-                  <select name="category" value={formData.category}
-                    onChange={handleChange}
+                  <input type="text" name="category"
+                    value={formData.category} onChange={handleChange}
+                    placeholder="예: 옥수수, 대두박"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2
-                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                               text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -584,70 +540,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ── 불러오기 모달: 저장된 재고 검색 ── */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] flex flex-col">
-            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 저장된 재고 불러오기</h3>
-            <p className="text-xs text-gray-500 mb-3">검색 후 선택하면 수정 화면이 열려요</p>
-            <input
-              type="text"
-              value={loadSearchText}
-              onChange={e => setLoadSearchText(e.target.value)}
-              placeholder="🔍 품목명, 카테고리 검색..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3
-                         focus:outline-none focus:ring-2 focus:ring-orange-500"
-              autoFocus
-            />
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-              {loadFiltered.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">검색 결과가 없어요</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">품목명</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">카테고리</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">현재재고</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">단위</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">상태</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {loadFiltered.map(item => (
-                      <tr key={item.id}
-                        onClick={() => handleLoadSelect(item)}
-                        className="hover:bg-orange-50 cursor-pointer transition-colors">
-                        <td className="px-3 py-2 font-medium text-gray-800">{item.item}</td>
-                        <td className="px-3 py-2">
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">{item.category}</span>
-                        </td>
-                        <td className={`px-3 py-2 font-bold ${isLowStock(item) ? 'text-red-600' : 'text-green-600'}`}>
-                          {item.current.toLocaleString()}
-                        </td>
-                        <td className="px-3 py-2 text-gray-600">{item.unit}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                            ${isLowStock(item) ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                            {isLowStock(item) ? '부족' : '정상'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="flex justify-between items-center mt-4">
-              <span className="text-xs text-gray-400">{loadFiltered.length}건</span>
-              <button onClick={() => setShowLoadModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

@@ -26,7 +26,7 @@ function createUsersRouter(db) {
     router.post('/login', (req, res) => {
         try {
             const { username, password } = req.body;
-            const user = db.prepare(`SELECT * FROM users WHERE username = ? AND password = ?`).get([username, password]);
+            const user = db.prepare(`SELECT * FROM users WHERE username = ? AND password = ?`).get(username, password);
             if (!user) {
                 // 아이디 또는 비밀번호가 틀린 경우
                 return res.status(401).json({ error: '아이디 또는 비밀번호가 틀렸어요' });
@@ -34,10 +34,11 @@ function createUsersRouter(db) {
             // 마지막 로그인 시간 업데이트
             const lastLogin = new Date().toLocaleString('ko-KR');
             db.prepare(`UPDATE users SET lastLogin = ? WHERE id = ?`)
-                .run([lastLogin, user.id]);
+                .run(lastLogin, user.id);
             // 비밀번호는 빼고 반환해요 (보안)
+            // webToken: 웹 브라우저에서 API 인증에 사용해요
             const { password: _, ...userWithoutPassword } = user;
-            res.json({ ...userWithoutPassword, lastLogin });
+            res.json({ ...userWithoutPassword, lastLogin, webToken: process.env.API_KEY || '' });
         }
         catch (e) {
             res.status(500).json({ error: '로그인 실패' });
@@ -63,7 +64,7 @@ function createUsersRouter(db) {
             const result = db.prepare(`
         INSERT INTO users (username, password, role)
         VALUES (?, ?, ?)
-      `).run([username, password, role ?? '일반직원']);
+      `).run(username, password, role ?? '일반직원');
             const created = db.prepare(`SELECT id, username, role, lastLogin, createdAt FROM users WHERE id = ?`).get(result.lastInsertRowid);
             res.json(created);
         }
@@ -84,13 +85,13 @@ function createUsersRouter(db) {
                 // 비밀번호도 변경하는 경우
                 db.prepare(`
           UPDATE users SET username=?, password=?, role=? WHERE id=?
-        `).run([username, password, role, req.params.id]);
+        `).run(username, password, role, req.params.id);
             }
             else {
                 // 비밀번호는 그대로, 나머지만 변경
                 db.prepare(`
           UPDATE users SET username=?, role=? WHERE id=?
-        `).run([username, role, req.params.id]);
+        `).run(username, role, req.params.id);
             }
             const updated = db.prepare(`SELECT id, username, role, lastLogin, createdAt FROM users WHERE id = ?`).get(req.params.id);
             res.json(updated);

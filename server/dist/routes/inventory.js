@@ -37,12 +37,7 @@ function createInventoryRouter(db) {
             const result = db.prepare(`
         INSERT INTO inventory (item, category, unit, current, minStock, lastUpdated, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run([
-                item, category ?? '', unit ?? '',
-                current ?? 0, minStock ?? 0,
-                lastUpdated ?? new Date().toISOString().split('T')[0],
-                memo ?? ''
-            ]);
+      `).run(item, category ?? '', unit ?? '', current ?? 0, minStock ?? 0, lastUpdated ?? new Date().toISOString().split('T')[0], memo ?? '');
             const created = db.prepare(`SELECT * FROM inventory WHERE id = ?`).get(result.lastInsertRowid);
             res.json(created);
         }
@@ -59,13 +54,7 @@ function createInventoryRouter(db) {
         UPDATE inventory
         SET item=?, category=?, unit=?, current=?, minStock=?, lastUpdated=?, memo=?
         WHERE id=?
-      `).run([
-                item, category ?? '', unit ?? '',
-                current ?? 0, minStock ?? 0,
-                lastUpdated ?? new Date().toISOString().split('T')[0],
-                memo ?? '',
-                req.params.id
-            ]);
+      `).run(item, category ?? '', unit ?? '', current ?? 0, minStock ?? 0, lastUpdated ?? new Date().toISOString().split('T')[0], memo ?? '', req.params.id);
             const updated = db.prepare(`SELECT * FROM inventory WHERE id = ?`).get(req.params.id);
             res.json(updated);
         }

@@ -38,7 +38,7 @@ function createRatesRouter(db) {
             const { value } = req.body;
             db.prepare(`
         UPDATE calc_rates SET value = ? WHERE key = ?
-      `).run([value, req.params.key]);
+      `).run(value, req.params.key);
             const updated = db.prepare(`SELECT * FROM calc_rates WHERE key = ?`).get(req.params.key);
             res.json(updated);
         }

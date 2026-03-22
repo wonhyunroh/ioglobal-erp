@@ -37,10 +37,7 @@ function createPartnersRouter(db) {
             const result = db.prepare(`
         INSERT INTO partners (name, type, country, contact, email, phone, address, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run([
-                name, type ?? '매입처', country ?? '', contact ?? '',
-                email ?? '', phone ?? '', address ?? '', memo ?? ''
-            ]);
+      `).run(name, type ?? '매입처', country ?? '', contact ?? '', email ?? '', phone ?? '', address ?? '', memo ?? '');
             // 방금 추가한 거래처 전체 데이터 반환
             const created = db.prepare(`SELECT * FROM partners WHERE id = ?`).get(result.lastInsertRowid);
             res.json(created);
@@ -58,11 +55,7 @@ function createPartnersRouter(db) {
         UPDATE partners
         SET name=?, type=?, country=?, contact=?, email=?, phone=?, address=?, memo=?
         WHERE id=?
-      `).run([
-                name, type, country ?? '', contact ?? '',
-                email ?? '', phone ?? '', address ?? '', memo ?? '',
-                req.params.id
-            ]);
+      `).run(name, type, country ?? '', contact ?? '', email ?? '', phone ?? '', address ?? '', memo ?? '', req.params.id);
             const updated = db.prepare(`SELECT * FROM partners WHERE id = ?`).get(req.params.id);
             res.json(updated);
         }

@@ -34,12 +34,13 @@ export function createItemsRouter(db: Database.Database) {
   // POST /api/items
   router.post('/', (req, res) => {
     try {
-      const { name, category, unit, price, origin, memo } = req.body;
+      const { name, category, unit, price, origin, memo, deliveryType, packType, priceDate } = req.body;
       const result = db.prepare(`
-        INSERT INTO items (name, category, unit, price, origin, memo)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO items (name, category, unit, price, origin, memo, deliveryType, packType, priceDate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? ''
+        name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? '',
+        deliveryType ?? '상차도', packType ?? '벌크', priceDate ?? ''
       );
       const created = db.prepare(`SELECT * FROM items WHERE id = ?`).get(result.lastInsertRowid);
       res.json(created);
@@ -52,13 +53,14 @@ export function createItemsRouter(db: Database.Database) {
   // PUT /api/items/:id
   router.put('/:id', (req, res) => {
     try {
-      const { name, category, unit, price, origin, memo } = req.body;
+      const { name, category, unit, price, origin, memo, deliveryType, packType, priceDate } = req.body;
       db.prepare(`
         UPDATE items
-        SET name=?, category=?, unit=?, price=?, origin=?, memo=?
+        SET name=?, category=?, unit=?, price=?, origin=?, memo=?, deliveryType=?, packType=?, priceDate=?
         WHERE id=?
       `).run(
         name, category ?? '', unit ?? '', price ?? 0, origin ?? '', memo ?? '',
+        deliveryType ?? '상차도', packType ?? '벌크', priceDate ?? '',
         req.params.id
       );
       const updated = db.prepare(`SELECT * FROM items WHERE id = ?`).get(req.params.id);
