@@ -93,9 +93,9 @@ export default function Orders() {
     ...partners.map(p => p.company),
   ])].sort();
 
-  // 품목 자동완성 목록 (품목 관리에서 가져옴)
+  // 품목 자동완성 목록 (Items.category = 실제 품목명: 옥수수, 대두박 등)
   const usedItems = [...new Set([
-    ...items.map(i => i.name).filter(Boolean),
+    ...items.map(i => i.category).filter(Boolean),
     ...orders.map(o => o.item).filter(Boolean),
   ])].sort();
 
@@ -244,7 +244,8 @@ export default function Orders() {
   ) => {
     const { name, value } = e.target;
     if (name === 'item') {
-      const selectedItem = items.find(i => i.name === value);
+      // Items.category = 품목명(옥수수 등), Items.name = 화주명
+      const selectedItem = items.find(i => i.category === value);
       setFormData(prev => ({
         ...prev,
         item: value,
