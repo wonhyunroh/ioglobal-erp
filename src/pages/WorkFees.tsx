@@ -6,7 +6,7 @@ import {
   updateWorkFee,
   deleteWorkFee,
 } from '../db';
-import { exportWorkFees } from '../excel';
+import { exportWorkFees, parseExcelFile } from '../excel';
 
 const LOCATIONS = ['광양', '녹산', '두동'] as const;
 
@@ -208,8 +208,76 @@ export default function WorkFees() {
     }
   };
 
+  // ── 엑셀 파일에서 작업비 데이터 불러오기 ──
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const rows = await parseExcelFile(file);
+      if (rows.length === 0) {
+        alert('엑셀 파일에 데이터가 없어요!');
+        return;
+      }
+
+      // 엑셀 컬럼명 매핑 (유연하게 여러 가지 이름 지원)
+      const findCol = (row: any, candidates: string[]): string => {
+        for (const c of candidates) {
+          if (row[c] !== undefined) return row[c];
+        }
+        return '';
+      };
+      const findNum = (row: any, candidates: string[]): number => {
+        for (const c of candidates) {
+          if (row[c] !== undefined) return parseFloat(row[c]) || 0;
+        }
+        return 0;
+      };
+
+      const parsed = rows.map(row => ({
+        yearMonth: findCol(row, ['년월', '연월', 'yearMonth']) || filterMonth,
+        location: findCol(row, ['지역', 'location', '구분']) || '광양',
+        partner: findCol(row, ['거래처', 'partner', '회사명', '발행처']),
+        item: findCol(row, ['품목', 'item', '품목명']),
+        weightKg: findNum(row, ['중량', '중량(kg)', '중량(KG)', 'weightKg', 'KG']),
+        salesPrice: findNum(row, ['매출단가', 'salesPrice', '매출 단가']),
+        salesAmount: findNum(row, ['매출액', 'salesAmount', '매출금액', '매출']),
+        purchasePrice: findNum(row, ['매입단가', 'purchasePrice', '매입 단가']),
+        purchaseAmount: findNum(row, ['매입액', 'purchaseAmount', '매입금액', '매입']),
+        memo: findCol(row, ['메모', 'memo', '비고']) || '',
+      })).filter(r => r.partner || r.item); // 거래처나 품목이 있는 행만
+
+      if (parsed.length === 0) {
+        alert('유효한 데이터가 없어요!\n\n엑셀에 거래처, 품목 컬럼이 있는지 확인해주세요.');
+        return;
+      }
+
+      if (!window.confirm(`${parsed.length}건의 작업비 데이터를 불러올까요?`)) return;
+
+      const newFees: WorkFee[] = [];
+      for (const p of parsed) {
+        const created = await saveWorkFee(p as Omit<WorkFee, 'id'>);
+        newFees.push(created);
+      }
+      setFees(prev => [...prev, ...newFees]);
+      alert(`${newFees.length}건 엑셀 불러오기 완료!`);
+    } catch {
+      alert('엑셀 파일 읽기 실패! 파일 형식을 확인해주세요.');
+    }
+    // input 초기화 (같은 파일 다시 선택 가능하게)
+    e.target.value = '';
+  };
+
   return (
     <div>
+      {/* 숨겨진 파일 input */}
+      <input
+        type="file"
+        id="excel-import"
+        accept=".xlsx,.xls,.csv"
+        onChange={handleExcelImport}
+        className="hidden"
+      />
+
       {/* ── 헤더 ── */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -223,6 +291,11 @@ export default function WorkFees() {
             className="bg-orange-500 text-white px-4 py-2 rounded-lg
                        hover:bg-orange-600 transition-colors font-medium text-sm">
             📂 불러오기
+          </button>
+          <button onClick={() => document.getElementById('excel-import')?.click()}
+            className="bg-cyan-500 text-white px-4 py-2 rounded-lg
+                       hover:bg-cyan-600 transition-colors font-medium text-sm">
+            📄 엑셀 불러오기
           </button>
           <button onClick={handleCopyPrevMonth}
             className="bg-purple-500 text-white px-4 py-2 rounded-lg

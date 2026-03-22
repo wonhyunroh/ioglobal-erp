@@ -170,6 +170,7 @@ export default function CostCalc({ currentUser }: Props) {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [saveName, setSaveName]           = useState('');
+  const [calcSearchText, setCalcSearchText] = useState('');
 
   // 관리자 여부 확인
   const isAdmin = currentUser?.role === '관리자';
@@ -839,27 +840,55 @@ export default function CostCalc({ currentUser }: Props) {
         </div>
       )}
 
-      {/* ── 계산 불러오기 모달 ── */}
-      {showLoadModal && (
+      {/* ── 계산 불러오기 모달 (계약번호/BL번호 검색) ── */}
+      {showLoadModal && (() => {
+        const q = calcSearchText.toLowerCase();
+        const filtered = !calcSearchText ? savedCalcs : savedCalcs.filter(calc => {
+          const data = calc.data as any;
+          return calc.name.toLowerCase().includes(q) ||
+            (data.contractNo || '').toLowerCase().includes(q) ||
+            (data.blNo || '').toLowerCase().includes(q);
+        });
+        return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center
                         justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">📂 저장된 계산 불러오기</h3>
-            {savedCalcs.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] flex flex-col">
+            <h3 className="text-lg font-bold text-gray-800 mb-1">📂 저장된 계산 불러오기</h3>
+            <p className="text-xs text-gray-500 mb-3">계약번호 또는 B/L번호로 검색하세요</p>
+            <input
+              type="text"
+              value={calcSearchText}
+              onChange={e => setCalcSearchText(e.target.value)}
+              placeholder="🔍 계약번호, B/L번호, 저장명 검색..."
+              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3
+                         focus:outline-none focus:ring-2 focus:ring-orange-500"
+              autoFocus
+            />
+            {filtered.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">
-                저장된 계산이 없어요
+                {savedCalcs.length === 0 ? '저장된 계산이 없어요' : '검색 결과가 없어요'}
               </p>
             ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {savedCalcs.map(calc => (
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {filtered.map(calc => {
+                  const data = calc.data as any;
+                  return (
                   <div key={calc.id}
                        className="flex items-center justify-between p-3
                                   border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800">{calc.name}</p>
-                      <p className="text-xs text-gray-400">{calc.created_at}</p>
+                      <div className="flex gap-3 text-xs text-gray-500 mt-1">
+                        {data.contractNo && (
+                          <span>계약: <span className="text-blue-600 font-medium">{data.contractNo}</span></span>
+                        )}
+                        {data.blNo && (
+                          <span>B/L: <span className="text-indigo-600 font-medium">{data.blNo}</span></span>
+                        )}
+                        <span>{calc.created_at}</span>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 ml-2">
                       <button
                         onClick={() => handleLoadCalc(calc)}
                         className="text-xs text-blue-600 hover:text-blue-800
@@ -876,11 +905,13 @@ export default function CostCalc({ currentUser }: Props) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-            <div className="flex justify-end mt-4">
-              <button onClick={() => setShowLoadModal(false)}
+            <div className="flex justify-between items-center mt-4">
+              <span className="text-xs text-gray-400">{filtered.length}건</span>
+              <button onClick={() => { setShowLoadModal(false); setCalcSearchText(''); }}
                 className="px-4 py-2 text-sm font-medium text-gray-600
                            border border-gray-300 rounded-lg hover:bg-gray-50">
                 닫기
@@ -888,7 +919,8 @@ export default function CostCalc({ currentUser }: Props) {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
